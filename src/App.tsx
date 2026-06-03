@@ -17,7 +17,8 @@ import {
   ThumbsUp, 
   ArrowRight,
   Info,
-  QrCode
+  QrCode,
+  CheckCircle2
 } from 'lucide-react';
 import { db } from './firebase';
 import QrScanner from './components/QrScanner';
@@ -81,6 +82,12 @@ export default function App() {
   const [thankYouText, setThankYouText] = useState('');
   const [selectedTriviaOption, setSelectedTriviaOption] = useState<number | null>(null);
   const [triviaError, setTriviaError] = useState('');
+  const [digitalCompleted, setDigitalCompleted] = useState(false);
+
+  // Reset digital completed state when the team advances to the next station
+  useEffect(() => {
+    setDigitalCompleted(false);
+  }, [currentTeam?.currentStation]);
 
   // Passcode verification states
   const [stationPasscode, setStationPasscode] = useState('');
@@ -165,6 +172,10 @@ export default function App() {
         const matched = teamsList.find(t => t.id === currentTeam.id);
         if (matched) {
           setCurrentTeam(matched);
+        } else {
+          // Team document was deleted from Firestore (game has been reset)
+          localStorage.removeItem('nave_nachum_team_id');
+          setCurrentTeam(null);
         }
       }
     });
@@ -828,115 +839,257 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Physical Task Guidelines and Completion Interface */}
+                        {/* Interactive Task & Physical Verification */}
                         <div className="border-t border-slate-800/60 pt-6 space-y-6">
-                          <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl">
-                                   {currentIdx === 2 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1">
-                                <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 3:</p>
-                                <p>משימת הקואורדינציה מתבצעת אצל אבות הבית. שמרו על הסדר והסבלנות!</p>
-                              </div>
-                            )}
 
-                            {currentIdx === 3 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-3">
-                                <p className="font-semibold text-yellow-400">💡 מכתב תודה (תחנה 4):</p>
-                                <p className="text-slate-300">בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, תוכלו לכתוב אותו בקצרה גם כאן, והוא יופיע באופן מיידי על גבי לוח המודעות הדיגיטלי של כל המדריכים:</p>
-                                <textarea
-                                  value={thankYouText}
-                                  onChange={(e) => setThankYouText(e.target.value)}
-                                  rows={2}
-                                  placeholder="הקלידו את מכתב התודה לתצוגה בלוח המדריכים..."
-                                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-600 text-xs font-medium leading-relaxed resize-none focus:outline-none focus:border-red-500"
-                                />
-                              </div>
-                            )}
+                          <div className="space-y-4">
+                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <span className="bg-red-500/20 text-red-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">א</span>
+                              <span>משימה דיגיטלית במסך:</span>
+                            </h3>
 
-                            {currentIdx === 4 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1">
-                                <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 5 (תפזורת מורים):</p>
-                                <p>גשו לחדר המורים ופתרו את דף תפזורת המורים המודפס שקיבלתם. מצאו את המורים והשלימו!</p>
-                              </div>
-                            )}
-
-                            {currentIdx === 5 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1">
-                                <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 6 הסופית:</p>
-                                <p>השיבו לשאלת המנהלת בחדר המנהלת או הציגו לה את משימותיכם לאורך המרוץ לאישור האחרון!</p>
-                              </div>
-                            )}
-
-                            {/* Verification Code Form / QR Scanner button */}
-                            <div className="bg-slate-900/50 p-4 border border-slate-700/60 rounded-2xl space-y-4 mt-2">
-                              <div>
-                                <label className="block text-xs font-bold text-slate-200 mb-1">
-                                  📷 אימות התחנה והתקדמות:
-                                </label>
-                                <p className="text-[11px] text-slate-400 leading-relaxed">
-                                  סיימתם את המשימה הפיזית? סרקו את שלט ה-QR של התחנה או הקלידו את קוד האימות מהמדריך!
+                            {/* Render the current digital task based on station index */}
+                            {digitalCompleted ? (
+                              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-5 text-center space-y-2">
+                                <CheckCircle2 className="w-10 h-10 text-emerald-405 mx-auto animate-pulse" />
+                                <h4 className="text-base font-black text-white">המשימה הדיגיטלית פוצחה בהצלחה! 🏆</h4>
+                                <p className="text-xs text-emerald-350 leading-relaxed max-w-sm mx-auto font-medium">
+                                  מעולה! פתרתם את חלק א׳. עכשיו עברו לשלב הבא: מצאו או קבלו מהמנחה בשטח את המכתב הפיזי של התחנה, המכיל את קוד האימות הבא!
                                 </p>
                               </div>
+                            ) : (
+                              <div className="space-y-4 animate-in fade-in duration-300">
+                                {currentIdx === 0 && <MemoryTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 1 && (
+                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                      <span>חידת הקפיטריה הדיגיטלית</span>
+                                    </div>
+                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
+                                      המחשב של קופת הקפיטריה השתגע! פתרו את שאלת המסטיקים והארטיקים הדיגיטלית כדי להמשיך:
+                                    </p>
+                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-800 font-medium mb-2">
+                                      <p className="text-orange-400 font-mono text-center text-xs md:text-sm leading-relaxed font-bold">
+                                        ”מסטיק עולה 2 ש״ח, ארטיק עולה 5 ש״ח. קנינו סך הכל 10 פריטים ושילמנו 32 ש״ח. כמה ארטיקים קנינו בסך הכל?“
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                      {[2, 3, 4, 5, 6, 8].map((num) => (
+                                        <button
+                                          key={num}
+                                          type="button"
+                                          onClick={() => {
+                                            if (num === 4) {
+                                              setDigitalCompleted(true);
+                                              setAnswerError('');
+                                            } else {
+                                              setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️');
+                                            }
+                                          }}
+                                          className="bg-slate-905 hover:bg-slate-700 text-slate-100 font-bold py-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition duration-250 text-xs sm:text-sm active:scale-95"
+                                        >
+                                          {num} ארטיקים
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {answerError && (
+                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
+                                    )}
+                                  </div>
+                                )}
+                                {currentIdx === 2 && <CoordinationTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 3 && (
+                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                      <span>כתבו מכתב תודה דיגיטלי</span>
+                                    </div>
+                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-medium">
+                                      בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, כתבו אותו בקצרה גם כאן, והוא יופיע באופן מיידי על גבי לוח המודעות הדיגיטלי של כל המדריכים:
+                                    </p>
+                                    <textarea
+                                      value={thankYouText}
+                                      onChange={(e) => {
+                                        setThankYouText(e.target.value);
+                                        setAnswerError('');
+                                      }}
+                                      rows={3}
+                                      placeholder="הקלידו מילת הערכה או תודה לצוות המזכירות והניהול..."
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-xs md:text-sm font-medium leading-relaxed resize-none focus:outline-none focus:border-red-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (thankYouText.trim().length >= 8) {
+                                          setDigitalCompleted(true);
+                                          setAnswerError('');
+                                        } else {
+                                          setAnswerError('אנא כתבו ברכה משמעותית (לפחות 8 תווים) כדי להמשיך!');
+                                        }
+                                      }}
+                                      className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 text-white font-bold py-3.5 rounded-xl transition text-xs shadow-lg"
+                                    >
+                                      שגרו ברכת הוקרה וסיימו משימה זו ! ❤️
+                                    </button>
+                                    {answerError && (
+                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
+                                    )}
+                                  </div>
+                                )}
+                                {currentIdx === 4 && <WordSearchTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 5 && (
+                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                      <span>חידת המנהלת הדיגיטלית</span>
+                                    </div>
+                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
+                                      המנהלת רוצה לוודא שאתם מכירים את ההיסטוריה של תיכון נווה נחום. ענו נכון כדי לפתוח את נעילת קוד המעבר:
+                                    </p>
+                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed">
+                                      מתי רשמית נוסד בית הספר התיכון נווה נחום?
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2.5">
+                                      {[
+                                        { id: 1, text: "בשנת 1982 על ידי חבר נאמנים" },
+                                        { id: 2, text: "בשנת 1994 (שנת ההקמה הרשמית)" },
+                                        { id: 3, text: "בשנת 2001 עם מעבר הבניין הישן" },
+                                        { id: 4, text: "בשנת 2008 במסגרת הרפורמה הגדולה" }
+                                      ].map((opt) => (
+                                        <button
+                                          key={opt.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedTriviaOption(opt.id);
+                                            if (opt.id === 2) {
+                                              setDigitalCompleted(true);
+                                              setTriviaError('');
+                                            } else {
+                                              setTriviaError('תשובה שגויה! נסו להתייעץ בחדר המנהלת או בסביבתה.');
+                                            }
+                                          }}
+                                          className={`text-right px-4 py-3.5 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                            selectedTriviaOption === opt.id
+                                              ? opt.id === 2
+                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                              : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                          }`}
+                                        >
+                                          <span>{opt.text}</span>
+                                          {selectedTriviaOption === opt.id && (
+                                            <span className="text-xs font-bold font-mono">
+                                              {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
+                                            </span>
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {triviaError && (
+                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{triviaError}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
 
-                              {/* QR Code Scanner Toggle block */}
-                              {isScanningQr ? (
-                                <QrScanner
-                                  onScanSuccess={handleQrSolved}
-                                  onClose={() => setIsScanningQr(false)}
-                                  expectedCode={requiredCode}
-                                />
+                          <div className="space-y-4 pt-4 border-t border-slate-800/60">
+                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <span className="bg-red-500/20 text-red-505 w-6 h-6 rounded-full flex items-center justify-center text-xs">ב</span>
+                              <span>אימות קבלת המכתב הפיזי בשטח ✉️</span>
+                            </h3>
+
+                            <div className={`bg-slate-800/80 border rounded-2xl p-5 md:p-6 space-y-4 shadow-xl transition-all duration-300 ${
+                              digitalCompleted ? 'border-yellow-500/40 opacity-100' : 'border-slate-800 opacity-60 pointer-events-none'
+                            }`}>
+                              {!digitalCompleted ? (
+                                <p className="text-xs text-yellow-450 font-bold text-center bg-yellow-500/10 p-3 rounded-xl leading-relaxed">
+                                  ⚠️ שימו לב: עליכם לפתור קודם את המשימה הדיגיטלית (שלב א׳) כדי לאפשר את הזנת הקוד הפיזי של התחנה!
+                                </p>
                               ) : (
+                                <p className="text-xs text-emerald-400 font-bold text-center bg-emerald-500/10 p-3 rounded-xl leading-relaxed">
+                                  🎉 מעולה! הפתרון הדיגיטלי הושלם. כעת מצאו את המכתב הפיזי של התחנה בשטח, והזינו את הקוד שלו כדי להתקדם!
+                                </p>
+                              )}
+
+                              <div className="bg-slate-900/50 p-4 border border-slate-700/60 rounded-2xl space-y-4">
+                                <div>
+                                  <label className="block text-xs font-bold text-slate-200 mb-1">
+                                    🔑 אימות התקדמות המירוץ:
+                                  </label>
+                                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                                    מצאתם את המכתב או השלט הפיזי בתחנה? סרקו את ה-QR שלו או הקלידו את קוד האימות בן 4 הספרות המופיע עליו!
+                                  </p>
+                                </div>
+
+                                {/* QR Code Scanner Toggle block */}
+                                {isScanningQr ? (
+                                  <QrScanner
+                                    onScanSuccess={handleQrSolved}
+                                    onClose={() => setIsScanningQr(false)}
+                                    expectedCode={requiredCode}
+                                  />
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={!digitalCompleted}
+                                    onClick={() => {
+                                      setPasscodeError('');
+                                      setIsScanningQr(true);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm disabled:opacity-45"
+                                  >
+                                    <QrCode className="w-5 h-5 text-white shrink-0 animate-pulse" />
+                                    <span>סרקו את קוד ה-QR במכתב הפיזי 📷</span>
+                                  </button>
+                                )}
+
+                                <div className="relative flex py-1 items-center">
+                                  <div className="flex-grow border-t border-slate-800"></div>
+                                  <span className="flex-shrink mx-4 text-slate-500 text-[10px] uppercase font-bold">או הקלידו את הקוד מהמכתב</span>
+                                  <div className="flex-grow border-t border-slate-800"></div>
+                                </div>
+
+                                <input
+                                  type="text"
+                                  pattern="[0-9]*"
+                                  inputMode="numeric"
+                                  maxLength={4}
+                                  disabled={!digitalCompleted}
+                                  value={stationPasscode}
+                                  onChange={(e) => {
+                                    setStationPasscode(e.target.value);
+                                    setPasscodeError('');
+                                  }}
+                                  placeholder="הקלידו כאן קוד בן 4 ספרות..."
+                                  className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-650 text-sm focus:outline-none focus:border-red-500 disabled:opacity-50"
+                                />
+                                {passcodeError && (
+                                  <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse leading-relaxed">
+                                    {passcodeError}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="pt-2">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setPasscodeError('');
-                                    setIsScanningQr(true);
-                                  }}
-                                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm"
+                                  disabled={!digitalCompleted}
+                                  onClick={handleSolveStation}
+                                  className="w-full bg-gradient-to-r from-red-650 to-yellow-500 hover:from-red-600 hover:to-yellow-450 text-white font-black py-4 rounded-2xl transition duration-200 transform active:scale-95 shadow-xl shadow-red-600/20 text-sm md:text-base flex items-center justify-center gap-2 disabled:opacity-40"
                                 >
-                                  <QrCode className="w-5 h-5 text-white shrink-0 animate-pulse" />
-                                  <span>סרקו את קוד ה-QR בתחנה 📷</span>
+                                  <span>אמת קוד והמשך במירוץ ➔</span>
+                                  <ArrowRight className="w-5 h-5 shrink-0" />
                                 </button>
-                              )}
-
-                              <div className="relative flex py-1 items-center">
-                                <div className="flex-grow border-t border-slate-800"></div>
-                                <span className="flex-shrink mx-4 text-slate-500 text-[10px] uppercase font-bold">או הקלידו ידנית שהמדריך נתן</span>
-                                <div className="flex-grow border-t border-slate-800"></div>
-                              </div>
-
-                              <input
-                                type="text"
-                                pattern="[0-9]*"
-                                inputMode="numeric"
-                                maxLength={6}
-                                value={stationPasscode}
-                                onChange={(e) => {
-                                  setStationPasscode(e.target.value);
-                                  setPasscodeError('');
-                                }}
-                                placeholder="הקלידו כאן קוד בן 4 ספרות..."
-                                className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-600 text-sm focus:outline-none focus:border-red-500"
-                              />
-                              {passcodeError && (
-                                <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse leading-relaxed">
-                                  {passcodeError}
+                                <p className="text-[11px] text-slate-400 text-center mt-2">
+                                  הזנת הקוד מהמכתב מאשרת שסיימתם לחלוטין את התחנה הפיזית!
                                 </p>
-                              )}
-                            </div>
-
-                            <div className="pt-2">
-                              <button
-                                onClick={handleSolveStation}
-                                className="w-full bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-755 hover:to-slate-650 text-slate-200 font-bold py-3.5 rounded-xl transition duration-200 transform active:scale-95 shadow-xl border border-slate-700/80 text-xs flex items-center justify-center gap-2"
-                              >
-                                <span>אישור קוד ידני והמשך ➔</span>
-                                <ArrowRight className="w-4 h-4 shrink-0" />
-                              </button>
-                              <p className="text-[11px] text-slate-400 text-center mt-2">
-                                הזנת קוד או סריקה מאשרת שסיימתם בהצלחה את התחנה הפיזית!
-                              </p>
+                              </div>
                             </div>
                           </div>
+
                         </div>
                       </div>
                     </div>
