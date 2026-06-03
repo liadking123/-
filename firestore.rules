@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    match /game/main {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create: if isValidId(teamId);
+      allow update: if isValidId(teamId);
+      allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create: if isValidId(notificationId);
+      allow update, delete: if false;
+    }
+  }
+}

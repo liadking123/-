@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "GameState": {
+      "title": "GameState",
+      "description": "Global state of the game",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Current phase of the race: waiting, countdown, active, ended"
+        },
+        "countdown": {
+          "type": "integer",
+          "description": "Countdown value: 3, 2, 1, or 0 (go)"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the race was started"
+        }
+      },
+      "required": ["status"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A team participating in the race",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "Names of both members of the pair" },
+        "classNumber": { "type": "string", "description": "The classroom identifier of the team" },
+        "currentStation": { "type": "integer", "description": "Index of the current station" },
+        "score": { "type": "integer", "description": "Number of completed stations" },
+        "isCompleted": { "type": "boolean", "description": "Whether they completed all stations" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "currentStation", "isCompleted"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Temporary notification triggered when a team solves a station",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamName": { "type": "string" },
+        "stationIndex": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" }
+      },
+      "required": ["id", "teamName", "stationIndex", "createdAt"]
+    }
+  },
+  "firestore": {
+    "game/main": {
+      "schema": "GameState",
+      "description": "Main singleton document containing global state"
+    },
+    "teams/{teamId}": {
+      "schema": "Team",
+      "description": "Participating teams keyed by teamId"
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Global notifications list"
+    }
+  }
+}
