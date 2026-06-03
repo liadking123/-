@@ -16,9 +16,11 @@ import {
   FileText, 
   ThumbsUp, 
   ArrowRight,
-  Info
+  Info,
+  QrCode
 } from 'lucide-react';
 import { db } from './firebase';
+import QrScanner from './components/QrScanner';
 import { 
   doc, 
   onSnapshot, 
@@ -83,6 +85,7 @@ export default function App() {
   // Passcode verification states
   const [stationPasscode, setStationPasscode] = useState('');
   const [passcodeError, setPasscodeError] = useState('');
+  const [isScanningQr, setIsScanningQr] = useState(false);
 
   // Toast / announcement messages display
   const [activeToast, setActiveToast] = useState<string | null>(null);
@@ -306,6 +309,71 @@ export default function App() {
         }
       }
     });
+  };
+
+  // Handle QR Code successfully decoded
+  const handleQrSolved = async (scannedCode: string) => {
+    if (!currentTeam) return;
+    const currentIdx = currentTeam.currentStation;
+    const requiredCode = STATION_PASSCODES[currentIdx];
+
+    if (scannedCode === requiredCode) {
+      setStationPasscode(scannedCode);
+      setIsScanningQr(false);
+      
+      const nextIdx = currentIdx + 1;
+      const finished = nextIdx >= STATIONS.length;
+
+      try {
+        // Save the thanks note if it was typed (for station 4)
+        if (currentIdx === 3 && thankYouText.trim().length > 0) {
+          await updateDoc(doc(db, 'teams', currentTeam.id), {
+            thankYouNote: thankYouText.trim()
+          });
+        }
+
+        // Update state in server
+        await updateTeamStation(currentTeam.id, nextIdx, finished);
+        
+        // Trigger live notification
+        const statName = STATIONS[currentIdx].title;
+        const notifMsg = finished 
+          ? `🏆 וואו! הזוג "${currentTeam.name}" סרק קוד QR בהצלחה, סיים את המירוץ והגיע לקו הסיום! 🏆`
+          : `⚡ הזוג "${currentTeam.name}" סרק קוד QR בהצלחה בתחנת ${statName} והתקדם הלאה! ⚡`;
+        
+        await sendNotification(currentTeam.name, currentIdx, notifMsg);
+        
+        // Reset local states
+        setTextAnswer('');
+        setAnswerError('');
+        setSelectedTriviaOption(null);
+        setTriviaError('');
+        setThankYouText('');
+        setStationPasscode('');
+        setPasscodeError('');
+
+        setAlertModal({
+          isOpen: true,
+          title: '🎉 סריקה מוצלחת ומאושרת!',
+          message: finished 
+            ? 'סימנתם סיום מוחלט של כל מסלול המירוץ! כל הכבוד, גשו למדריך הראשי!' 
+            : `הקוד אושר בהצלחה! עברתם לתחנה הבאה: תחנה ${nextIdx + 1}.`,
+          type: 'success'
+        });
+      } catch (err) {
+        console.error(err);
+        setPasscodeError('שגיאה בעדכון ההתקדמות בבסיס הנתונים. נסו שוב או הזינו ידנית.');
+      }
+    } else {
+      setPasscodeError(`קוד ה-QR שסרקתם (${scannedCode}) אינו נכון עבור תחנה זו. וודאו שברשותכם הקוד הנכון של תחנה ${currentIdx + 1}`);
+      setAlertModal({
+        isOpen: true,
+        title: '❌ קוד לא תואם',
+        message: `קוד ה-QR שסרקתם (${scannedCode}) אינו תואם לתחנה הנוכחית שלכם (תחנה ${currentIdx + 1}). אנא וודאו שאתם סורקים את השלט הנכון המיועד לתחנה זו!`,
+        type: 'error'
+      });
+      setIsScanningQr(false);
+    }
   };
 
   // Handle Station Solving & Move Forward
@@ -723,6 +791,7 @@ export default function App() {
                 (() => {
                   const currentIdx = currentTeam.currentStation;
                   const station = STATIONS[currentIdx];
+                  const requiredCode = STATION_PASSCODES[currentIdx];
                   if (!station) return <div className="text-white">טוען תחנה...</div>;
 
                   return (
@@ -762,35 +831,7 @@ export default function App() {
                         {/* Physical Task Guidelines and Completion Interface */}
                         <div className="border-t border-slate-800/60 pt-6 space-y-6">
                           <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl">
-                            <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
-                              <Sparkles className="w-5 h-5 text-yellow-400" />
-                              <span>משימה פיזית בשטח</span>
-                            </div>
-                            
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                              כל המשימות של המירוץ למיליון מתבצעות באופן <strong className="text-white">פיזי ומעשי</strong> ברחבי בית הספר על פי ההנחיות שלמעלה. 
-                              שתפו פעולה עם חבריכם, קיימו את חוקי בית הספר, והפגינו ספורטיביות מנצחת!
-                            </p>
-
-                            {/* Additional specific guidelines based on the current station */}
-                            {currentIdx === 0 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1">
-                                <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 1:</p>
-                                <p>אמרו שלום מנומס ושמרו על הכללים בקרבת שער בית הספר!</p>
-                              </div>
-                            )}
-
-                            {currentIdx === 1 && (
-                              <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1.5">
-                                <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 2 (חידת קפיטריה):</p>
-                                <p className="text-slate-250 bg-slate-950/45 p-3 rounded-lg border border-slate-800 font-mono mb-2">
-                                  ”מסטיק עולה 2 ש״ח, ארטיק עולה 5 ש״ח. קנינו 10 פריטים ושילמנו 32 ש״ח. כמה ארטיקים קנינו בסך הכל?“
-                                </p>
-                                <p className="text-xs text-slate-400">חשבו את החידה ביחד או קבלו את התשובה מהמוכר/המדריך, ולאחר הביצוע המשיכו.</p>
-                              </div>
-                            )}
-
-                            {currentIdx === 2 && (
+                                   {currentIdx === 2 && (
                               <div className="bg-slate-900/40 p-4 rounded-xl text-xs text-slate-400 space-y-1">
                                 <p className="font-semibold text-yellow-400">💡 טיפ לתחנה 3:</p>
                                 <p>משימת הקואורדינציה מתבצעת אצל אבות הבית. שמרו על הסדר והסבלנות!</p>
@@ -825,14 +866,44 @@ export default function App() {
                               </div>
                             )}
 
-                            {/* Verification Code Form */}
-                            <div className="bg-slate-900/50 p-4 border border-slate-800 rounded-2xl space-y-2 mt-2">
-                              <label className="block text-xs font-bold text-slate-300">
-                                🔑 קוד אימות מהמדריך בתחנה הנוכחית:
-                              </label>
-                              <p className="text-[11px] text-slate-400">
-                                בצעו את המשימה הפיזית וקבלו את קוד האימות הדיגיטלי מהמדריך הנוכחי בתחנה כדי להתקדם במירוץ.
-                              </p>
+                            {/* Verification Code Form / QR Scanner button */}
+                            <div className="bg-slate-900/50 p-4 border border-slate-700/60 rounded-2xl space-y-4 mt-2">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-200 mb-1">
+                                  📷 אימות התחנה והתקדמות:
+                                </label>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  סיימתם את המשימה הפיזית? סרקו את שלט ה-QR של התחנה או הקלידו את קוד האימות מהמדריך!
+                                </p>
+                              </div>
+
+                              {/* QR Code Scanner Toggle block */}
+                              {isScanningQr ? (
+                                <QrScanner
+                                  onScanSuccess={handleQrSolved}
+                                  onClose={() => setIsScanningQr(false)}
+                                  expectedCode={requiredCode}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPasscodeError('');
+                                    setIsScanningQr(true);
+                                  }}
+                                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm"
+                                >
+                                  <QrCode className="w-5 h-5 text-white shrink-0 animate-pulse" />
+                                  <span>סרקו את קוד ה-QR בתחנה 📷</span>
+                                </button>
+                              )}
+
+                              <div className="relative flex py-1 items-center">
+                                <div className="flex-grow border-t border-slate-800"></div>
+                                <span className="flex-shrink mx-4 text-slate-500 text-[10px] uppercase font-bold">או הקלידו ידנית שהמדריך נתן</span>
+                                <div className="flex-grow border-t border-slate-800"></div>
+                              </div>
+
                               <input
                                 type="text"
                                 pattern="[0-9]*"
@@ -847,7 +918,7 @@ export default function App() {
                                 className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-600 text-sm focus:outline-none focus:border-red-500"
                               />
                               {passcodeError && (
-                                <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">
+                                <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse leading-relaxed">
                                   {passcodeError}
                                 </p>
                               )}
@@ -856,13 +927,13 @@ export default function App() {
                             <div className="pt-2">
                               <button
                                 onClick={handleSolveStation}
-                                className="w-full bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-500 hover:to-yellow-400 text-white font-black py-4 rounded-2xl transition duration-200 transform active:scale-95 shadow-xl shadow-red-600/20 text-sm md:text-base flex items-center justify-center gap-2"
+                                className="w-full bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-755 hover:to-slate-650 text-slate-200 font-bold py-3.5 rounded-xl transition duration-200 transform active:scale-95 shadow-xl border border-slate-700/80 text-xs flex items-center justify-center gap-2"
                               >
-                                <span>אמת קוד והמשך במירוץ ➔</span>
-                                <ArrowRight className="w-5 h-5 shrink-0" />
+                                <span>אישור קוד ידני והמשך ➔</span>
+                                <ArrowRight className="w-4 h-4 shrink-0" />
                               </button>
                               <p className="text-[11px] text-slate-400 text-center mt-2">
-                                הזנת הקוד מאשרת שסיימתם בהצלחה את התחנה הפיזית!
+                                הזנת קוד או סריקה מאשרת שסיימתם בהצלחה את התחנה הפיזית!
                               </p>
                             </div>
                           </div>
