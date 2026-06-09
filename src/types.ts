@@ -15,6 +15,8 @@ export interface Team {
   lastActive: string;
   joinedAt: string;
   thankYouNote?: string;
+  memoryStationMatches?: number;
+  memoryFinishedAt?: string;
 }
 
 export interface NotificationMsg {

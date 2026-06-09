@@ -83,10 +83,15 @@ export default function App() {
   const [selectedTriviaOption, setSelectedTriviaOption] = useState<number | null>(null);
   const [triviaError, setTriviaError] = useState('');
   const [digitalCompleted, setDigitalCompleted] = useState(false);
+  const [triviaPhase, setTriviaPhase] = useState(1);
 
   // Reset digital completed state when the team advances to the next station
   useEffect(() => {
     setDigitalCompleted(false);
+    setTriviaPhase(1);
+    setSelectedTriviaOption(null);
+    setTriviaError('');
+    setTextAnswer('');
   }, [currentTeam?.currentStation]);
 
   // Passcode verification states
@@ -859,39 +864,48 @@ export default function App() {
                               </div>
                             ) : (
                               <div className="space-y-4 animate-in fade-in duration-300">
-                                {currentIdx === 0 && <MemoryTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 0 && <MemoryTask onSuccess={() => setDigitalCompleted(true)} currentTeam={currentTeam} allTeams={allTeams} />}
                                 {currentIdx === 1 && (
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
                                     <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
                                       <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                      <span>חידת הקפיטריה הדיגיטלית</span>
+                                      <span>חידת הקפיטריה הדיגיטלית • רמת קושי גבוהה</span>
                                     </div>
                                     <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
-                                      המחשב של קופת הקפיטריה השתגע! פתרו את שאלת המסטיקים והארטיקים הדיגיטלית כדי להמשיך:
+                                      המחשב של קופת הקפיטריה השתגע ומציג חידה הדורשת מערכת משוואות! הזינו את התשובה כדי להמשיך:
                                     </p>
-                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-800 font-medium mb-2">
-                                      <p className="text-orange-400 font-mono text-center text-xs md:text-sm leading-relaxed font-bold">
-                                        ”מסטיק עולה 2 ש״ח, ארטיק עולה 5 ש״ח. קנינו סך הכל 10 פריטים ושילמנו 32 ש״ח. כמה ארטיקים קנינו בסך הכל?“
+                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-800 font-medium mb-3">
+                                      <p className="text-orange-450 font-sans text-right text-xs md:text-sm leading-relaxed font-bold">
+                                         ”קנינו 3 חבילות מסטיק ו-4 ארטיקים בצהריים בעלות כוללת של 38 ש״ח. מאוחר יותר באותו היום, קנינו עוד 2 חבילות מסטיק ו-5 ארטיקים בעלות כוללת של 37 ש״ח. מהו המחיר של ארטיק בודד בשקלים?“
                                       </p>
                                     </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                      {[2, 3, 4, 5, 6, 8].map((num) => (
-                                        <button
-                                          key={num}
-                                          type="button"
-                                          onClick={() => {
-                                            if (num === 4) {
-                                              setDigitalCompleted(true);
-                                              setAnswerError('');
-                                            } else {
-                                              setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️');
-                                            }
-                                          }}
-                                          className="bg-slate-905 hover:bg-slate-700 text-slate-100 font-bold py-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition duration-250 text-xs sm:text-sm active:scale-95"
-                                        >
-                                          {num} ארטיקים
-                                        </button>
-                                      ))}
+                                    <div className="space-y-3">
+                                      <input
+                                        type="text"
+                                        placeholder="הקלידו תשובה מספרית (למשל: 5) ובדקו..."
+                                        value={textAnswer}
+                                        onChange={(e) => {
+                                          setTextAnswer(e.target.value);
+                                          setAnswerError('');
+                                        }}
+                                        className="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono text-base focus:outline-none focus:border-red-500"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const cleanAnswer = textAnswer.trim();
+                                          if (cleanAnswer === '5' || cleanAnswer === 'חמש' || cleanAnswer === '5 שח' || cleanAnswer === '5 ש״ח') {
+                                            setDigitalCompleted(true);
+                                            setAnswerError('');
+                                            setTextAnswer('');
+                                          } else {
+                                            setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️ • שימו לב ששתי המשוואות צריכות להתקיים במקביל!');
+                                          }
+                                        }}
+                                        className="w-full bg-red-650 hover:bg-red-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-xs"
+                                      >
+                                        בדקו תשובה 🔍
+                                      </button>
                                     </div>
                                     {answerError && (
                                       <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
@@ -903,10 +917,10 @@ export default function App() {
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
                                     <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
                                       <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                      <span>כתבו מכתב תודה דיגיטלי</span>
+                                      <span>כתבו מכתב תודה דיגיטלי מורחב ומשמעותי</span>
                                     </div>
                                     <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-medium">
-                                      בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, כתבו אותו בקצרה גם כאן, והוא יופיע באופן מיידי על גבי לוח המודעות הדיגיטלי של כל המדריכים:
+                                      בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, כתבו ברכת הוקרה חמה ומשמעותית (<strong>לפחות 40 תווים ויש לכלול 2 מילים מתוך: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים</strong>):
                                     </p>
                                     <textarea
                                       value={thankYouText}
@@ -915,17 +929,23 @@ export default function App() {
                                         setAnswerError('');
                                       }}
                                       rows={3}
-                                      placeholder="הקלידו מילת הערכה או תודה לצוות המזכירות והניהול..."
+                                      placeholder="הקלידו מילת הערכה או תודה עשירה ומכובדת לצוות המזכירות והניהול הראוי להערכה..."
                                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-xs md:text-sm font-medium leading-relaxed resize-none focus:outline-none focus:border-red-500"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (thankYouText.trim().length >= 8) {
+                                        const text = thankYouText.trim();
+                                        const keywords = ['תודה', 'מעריכים', 'עבודה', 'מסורים', 'לנו', 'עוזרים'];
+                                        const foundKeywords = keywords.filter(word => text.includes(word));
+                                        
+                                        if (text.length < 40) {
+                                          setAnswerError('הברכה קצרה מדי! עליכם לכתוב לפחות 40 תווים כדי לבטא הערכה אמיתית ומכובדת ✍️');
+                                        } else if (foundKeywords.length < 2) {
+                                          setAnswerError('הברכה צריכה לכלול לפחות 2 מילות מפתח מעצימות מתוך הרשימה: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים.');
+                                        } else {
                                           setDigitalCompleted(true);
                                           setAnswerError('');
-                                        } else {
-                                          setAnswerError('אנא כתבו ברכה משמעותית (לפחות 8 תווים) כדי להמשיך!');
                                         }
                                       }}
                                       className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 text-white font-bold py-3.5 rounded-xl transition text-xs shadow-lg"
@@ -940,52 +960,157 @@ export default function App() {
                                 {currentIdx === 4 && <WordSearchTask onSuccess={() => setDigitalCompleted(true)} />}
                                 {currentIdx === 5 && (
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
-                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
-                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                      <span>חידת המנהלת הדיגיטלית</span>
+                                    <div className="flex justify-between items-center">
+                                      <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                        <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                        <span>חידת המנהלת הדיגיטלית המורחבת</span>
+                                      </div>
+                                      <span className="text-xs bg-slate-900 border border-slate-800 px-2 py-1 rounded text-orange-400 font-bold">
+                                        שלב {triviaPhase} מתוך 3
+                                      </span>
                                     </div>
                                     <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
-                                      המנהלת רוצה לוודא שאתם מכירים את ההיסטוריה של תיכון נווה נחום. ענו נכון כדי לפתוח את נעילת קוד המעבר:
+                                      המנהלת רוצה לוודא שאתם מכירים לעומק את מורשת בית הספר נווה נחום. ענו נכון על 3 שאלות רצופות כדי להמשיך:
                                     </p>
-                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed">
-                                      מתי רשמית נוסד בית הספר התיכון נווה נחום?
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-2.5">
-                                      {[
-                                        { id: 1, text: "בשנת 1982 על ידי חבר נאמנים" },
-                                        { id: 2, text: "בשנת 1994 (שנת ההקמה הרשמית)" },
-                                        { id: 3, text: "בשנת 2001 עם מעבר הבניין הישן" },
-                                        { id: 4, text: "בשנת 2008 במסגרת הרפורמה הגדולה" }
-                                      ].map((opt) => (
-                                        <button
-                                          key={opt.id}
-                                          type="button"
-                                          onClick={() => {
-                                            setSelectedTriviaOption(opt.id);
-                                            if (opt.id === 2) {
-                                              setDigitalCompleted(true);
-                                              setTriviaError('');
-                                            } else {
-                                              setTriviaError('תשובה שגויה! נסו להתייעץ בחדר המנהלת או בסביבתה.');
-                                            }
-                                          }}
-                                          className={`text-right px-4 py-3.5 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
-                                            selectedTriviaOption === opt.id
-                                              ? opt.id === 2
-                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
-                                                : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
-                                              : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
-                                          }`}
-                                        >
-                                          <span>{opt.text}</span>
-                                          {selectedTriviaOption === opt.id && (
-                                            <span className="text-xs font-bold font-mono">
-                                              {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
-                                            </span>
-                                          )}
-                                        </button>
-                                      ))}
-                                    </div>
+                                    
+                                    {triviaPhase === 1 && (
+                                      <>
+                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed">
+                                          שאלה 1: מתי רשמית נוסד בית הספר התיכון נווה נחום?
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-2.5">
+                                          {[
+                                            { id: 1, text: "בשנת 1982 על ידי חבר נאמנים של מערכת החינוך" },
+                                            { id: 2, text: "בשנת 1994 (שנת ההקמה הרשמית וההכרזה המוסדית)" },
+                                            { id: 3, text: "בשנת 2001 עם מעבר המבנה הראשון למתחם הישן" },
+                                            { id: 4, text: "בשנת 2008 במסגרת הרפורמה הגדולה של משרד החינוך" }
+                                          ].map((opt) => (
+                                            <button
+                                              key={opt.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedTriviaOption(opt.id);
+                                                if (opt.id === 2) {
+                                                  setTriviaError('');
+                                                  setTimeout(() => {
+                                                    setTriviaPhase(2);
+                                                    setSelectedTriviaOption(null);
+                                                  }, 800);
+                                                } else {
+                                                  setTriviaError('תשובה שגויה! נסו לשאול תלמידים ותיקים או את סגל המנהלה.');
+                                                }
+                                              }}
+                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                                selectedTriviaOption === opt.id
+                                                  ? opt.id === 2
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                              }`}
+                                            >
+                                              <span>{opt.text}</span>
+                                              {selectedTriviaOption === opt.id && (
+                                                <span className="text-xs font-bold font-mono">
+                                                  {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
+                                                </span>
+                                              )}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {triviaPhase === 2 && (
+                                      <>
+                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
+                                          שאלה 2: איזה מקצוע לימוד הוא מקצוע חובה בכל המגמות המדעיות השנה בתיכון?
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-2.5">
+                                          {[
+                                            { id: 1, text: "פיזיקה גרעינית ומאיצי חלקיקים" },
+                                            { id: 2, text: "מדעי המחשב ומבוא לתכנות" },
+                                            { id: 3, text: "אזרחות דיגיטלית ואתיקת רשת" },
+                                            { id: 4, text: "ביולוגיה חישובית והנדסה גנטית" }
+                                          ].map((opt) => (
+                                            <button
+                                              key={opt.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedTriviaOption(opt.id);
+                                                if (opt.id === 3) {
+                                                  setTriviaError('');
+                                                  setTimeout(() => {
+                                                    setTriviaPhase(3);
+                                                    setSelectedTriviaOption(null);
+                                                  }, 800);
+                                                } else {
+                                                  setTriviaError('תשובה שגויה! רמז: זה קשור לנורמות התנהגות ואחריות במרחב הווירטואלי.');
+                                                }
+                                              }}
+                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                                selectedTriviaOption === opt.id
+                                                  ? opt.id === 3
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                              }`}
+                                            >
+                                              <span>{opt.text}</span>
+                                              {selectedTriviaOption === opt.id && (
+                                                <span className="text-xs font-bold font-mono">
+                                                  {opt.id === 3 ? '✓ נכון!' : '✗ שגוי'}
+                                                </span>
+                                              )}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+
+                                    {triviaPhase === 3 && (
+                                      <>
+                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-855 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
+                                          שאלה 3: מהו מוטו בית הספר התיכון הרשמי החקוק מעל שער הכניסה הראשי?
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-2.5">
+                                          {[
+                                            { id: 1, text: "מדע, ערכים והתמדה לעתיד מזהיר" },
+                                            { id: 2, text: "דרך ארץ קדימה לידע ולמצוינות" },
+                                            { id: 3, text: "חינוך, חדשנות ומנהיגות קהילתית" },
+                                            { id: 4, text: "חוקרים היום, מובילים מחר בטכנולוגיה" }
+                                          ].map((opt) => (
+                                            <button
+                                              key={opt.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedTriviaOption(opt.id);
+                                                if (opt.id === 2) {
+                                                  setTriviaError('');
+                                                  setDigitalCompleted(true);
+                                                } else {
+                                                  setTriviaError('תשובה שגויה! הביטו מעל קורת הבטון של שער הכניסה הראשי.');
+                                                }
+                                              }}
+                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                                selectedTriviaOption === opt.id
+                                                  ? opt.id === 2
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                              }`}
+                                            >
+                                              <span>{opt.text}</span>
+                                              {selectedTriviaOption === opt.id && (
+                                                <span className="text-xs font-bold font-mono">
+                                                  {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
+                                                </span>
+                                              )}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+
                                     {triviaError && (
                                       <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{triviaError}</p>
                                     )}

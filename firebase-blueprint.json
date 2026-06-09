@@ -34,7 +34,9 @@
         "isCompleted": { "type": "boolean", "description": "Whether they completed all stations" },
         "completedAt": { "type": "string", "format": "date-time" },
         "lastActive": { "type": "string", "format": "date-time" },
-        "joinedAt": { "type": "string", "format": "date-time" }
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "memoryStationMatches": { "type": "integer", "description": "Number of memory cards matched in Station 1 (0 to 8)" },
+        "memoryFinishedAt": { "type": "string", "format": "date-time", "description": "Timestamp when they successfully completed Station 1 memory card task" }
       },
       "required": ["id", "name", "currentStation", "isCompleted"]
     },
