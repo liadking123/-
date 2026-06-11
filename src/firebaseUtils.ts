@@ -185,3 +185,13 @@ export async function resetGameData(): Promise<void> {
   }
 }
 
+// Delete a single team document
+export async function deleteTeam(teamId: string): Promise<void> {
+  const path = `teams/${teamId}`;
+  try {
+    await deleteDoc(doc(db, 'teams', teamId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+

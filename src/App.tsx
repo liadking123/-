@@ -18,7 +18,9 @@ import {
   ArrowRight,
   Info,
   QrCode,
-  CheckCircle2
+  CheckCircle2,
+  Trash2,
+  ChevronsLeft
 } from 'lucide-react';
 import { db } from './firebase';
 import QrScanner from './components/QrScanner';
@@ -43,7 +45,8 @@ import {
   checkTeamStatus, 
   sendNotification, 
   testConnection,
-  resetGameData
+  resetGameData,
+  deleteTeam
 } from './firebaseUtils';
 
 import MemoryTask from './components/MemoryTask';
@@ -92,6 +95,8 @@ export default function App() {
     setSelectedTriviaOption(null);
     setTriviaError('');
     setTextAnswer('');
+    setStationPasscode('');
+    setPasscodeError('');
   }, [currentTeam?.currentStation]);
 
   // Passcode verification states
@@ -1472,13 +1477,14 @@ export default function App() {
                         <th className="py-2.5 px-3">שם הזוג וכיתה</th>
                         <th className="py-2.5 px-3 text-center">תחנה נוכחית</th>
                         <th className="py-2.5 px-3 text-center">פתרונות</th>
+                        <th className="py-2.5 px-3 text-center">ניהול והעברת משימה</th>
                         <th className="py-2.5 px-3 text-left">מצב / אי פעילות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
                       {filteredTeams.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="text-center py-6 text-slate-500">
+                          <td colSpan={5} className="text-center py-6 text-slate-500">
                             ממתינים לצוותים שיתחברו...
                           </td>
                         </tr>
@@ -1528,6 +1534,109 @@ export default function App() {
                               </td>
                               <td className="py-3.5 px-3 text-center font-bold tracking-wider font-mono text-slate-300">
                                 {team.score} / 6
+                              </td>
+                              <td className="py-3.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {/* Manual Station Override Dropdown */}
+                                  <select
+                                    value={team.currentStation}
+                                    onChange={(e) => {
+                                      const nextStationNum = parseInt(e.target.value);
+                                      setConfirmModal({
+                                        isOpen: true,
+                                        title: 'שינוי תחנה ידני ⚠️',
+                                        message: `האם לפתוח/להעביר את הקבוצה הזו באופן ידני ל-${nextStationNum === 6 ? 'סיום המירוץ' : `תחנה ${nextStationNum + 1}`}? שינוי זה יעדכן את מסך המשחק שלהם באופן מיידי!`,
+                                        type: 'warning',
+                                        confirmText: 'כן, שנה תחנה',
+                                        cancelText: 'ביטול',
+                                        onConfirm: async () => {
+                                          setConfirmModal(null);
+                                          try {
+                                            await updateTeamStation(team.id, nextStationNum, nextStationNum === 6);
+                                            const label = nextStationNum === 6 ? 'סיום מהיר' : `תחנה ${nextStationNum + 1}`;
+                                            await sendNotification(
+                                              team.name, 
+                                              nextStationNum, 
+                                              `📣 המדריך העביר את "${team.name}" ידנית ל-${label}!`
+                                            );
+                                          } catch (err) {
+                                            console.error(err);
+                                          }
+                                        }
+                                      });
+                                    }}
+                                    className="bg-slate-800 border border-slate-700 text-xs rounded-xl px-2.5 py-1.5 text-white font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-yellow-500 hover:border-slate-600 transition"
+                                  >
+                                    <option value={0}>תחנה 1: שער סגור</option>
+                                    <option value={1}>תחנה 2: קפיטריה</option>
+                                    <option value={2}>תחנה 3: חדר אבות בית</option>
+                                    <option value={3}>תחנה 4: מזכירות</option>
+                                    <option value={4}>תחנה 5: חדר מורים</option>
+                                    <option value={5}>תחנה 6: מנהלת</option>
+                                    <option value={6}>🏆 סיימו בהצלחה</option>
+                                  </select>
+
+                                  {/* Quick Advance Button (+1) */}
+                                  <button
+                                    onClick={() => {
+                                      const nextS = Math.min(team.currentStation + 1, 6);
+                                      if (nextS === team.currentStation) return;
+                                      setConfirmModal({
+                                        isOpen: true,
+                                        title: 'בצע קפיצה ידנית ⚡',
+                                        message: `האם לאשר מעבר ישיר ותקין עבור הזוג "${team.name}" לתחנה הבאה (${nextS === 6 ? 'סיום' : `תחנה ${nextS + 1}`})?`,
+                                        type: 'info',
+                                        confirmText: 'כן, קדם אותם',
+                                        cancelText: 'ביטול',
+                                        onConfirm: async () => {
+                                          setConfirmModal(null);
+                                          try {
+                                            await updateTeamStation(team.id, nextS, nextS === 6);
+                                            const label = nextS === 6 ? 'סיום' : `תחנה ${nextS + 1}`;
+                                            await sendNotification(
+                                              team.name, 
+                                              nextS, 
+                                              `⚡ המדריך אישר מעבר משימה ל-${team.name}! הזוג קודם ל-${label}.`
+                                            );
+                                          } catch (err) {
+                                            console.error(err);
+                                          }
+                                        }
+                                      });
+                                    }}
+                                    disabled={team.currentStation >= 6}
+                                    className="p-1.5 text-slate-400 hover:text-yellow-400 hover:bg-slate-800 rounded-lg disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition shrink-0"
+                                    title="קדם שלב קדימה (+1)"
+                                  >
+                                    <ChevronsLeft className="w-4 h-4" />
+                                  </button>
+
+                                  {/* Delete single team button */}
+                                  <button
+                                    onClick={() => {
+                                      setConfirmModal({
+                                        isOpen: true,
+                                        title: 'מחיקת זוג מהמערכת 🚨',
+                                        message: `האם למחוק לחלוטין את הזוג "${team.name}"? הפעולה בלתי הפיכה ותנתק אותם מידית מהאתר!`,
+                                        type: 'danger',
+                                        confirmText: 'כן, מחק לצמיתות',
+                                        cancelText: 'ביטול',
+                                        onConfirm: async () => {
+                                          setConfirmModal(null);
+                                          try {
+                                            await deleteTeam(team.id);
+                                          } catch (err) {
+                                            console.error(err);
+                                          }
+                                        }
+                                      });
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                    title="מחיקת הזוג מהמירוץ"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                               <td className="py-3.5 px-3 text-left">
                                 {team.isCompleted ? (
