@@ -7,12 +7,12 @@ interface CoordinationTaskProps {
 
 export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
   const [cupsStacked, setCupsStacked] = useState(0);
-  const totalCupsNeeded = 8; // Toughened: 8 cups instead of 5
+  const totalCupsNeeded = 5; // Reduced from 8 to 5 for better accessibility
   const [sliderPos, setSliderPos] = useState(50); // 0 to 100
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'failed' | 'success'>('idle');
   
   // Use refs for moving values to achieve ultra-smooth 60fps movement with no React rendering tearing
-  const speed = useRef(2.4); // Toughened: Faster initial speed (2.4 instead of 1.8)
+  const speed = useRef(1.3); // Slower initial speed (1.3 instead of 2.4)
   const direction = useRef<'left' | 'right'>('right');
   const animationFrameId = useRef<number | null>(null);
 
@@ -53,20 +53,20 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
     if (gameState !== 'playing') {
       setGameState('playing');
       setCupsStacked(0);
-      speed.current = 2.4; // Challenging initial speed
+      speed.current = 1.3; // Much slower and easier initial speed
       direction.current = 'right';
       return;
     }
 
-    // Toughened: Target area is now incredibly narrow (44 to 56) giving only 12% width tolerance!
-    const isGood = sliderPos >= 44 && sliderPos <= 56;
+    // Wide, child-friendly target area: from 35% to 65% (giving a 30% hit zone!)
+    const isGood = sliderPos >= 35 && sliderPos <= 65;
 
     if (isGood) {
       const nextCups = cupsStacked + 1;
       setCupsStacked(nextCups);
       
-      // Toughened: Speed up by 0.45 per level instead of 0.3 for a real adrenaline rush
-      speed.current += 0.45;
+      // Gentle speed increase per cup stacked
+      speed.current += 0.15;
 
       if (nextCups >= totalCupsNeeded) {
         setGameState('success');
@@ -90,15 +90,15 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
     <div className="bg-slate-800/80 backdrop-blur border border-red-500/40 rounded-2xl p-5 md:p-6 shadow-2xl text-right">
       <h3 className="text-xl font-bold mb-3 flex items-center justify-start gap-2 text-yellow-400">
         <Target className="w-5 h-5 text-yellow-400" />
-        <span>משימת קואורדינציה קשה במיוחד • מגדל כוסות</span>
+        <span>משימת קואורדינציה חווייתית • מגדל כוסות</span>
       </h3>
       
       <p className="text-xs md:text-sm text-slate-300 mb-5 leading-relaxed text-right md:text-center">
-        צוות אבות הבית הגביר את רמת הקושי! כעת עליכם לצבור רצף מטורף של <strong className="text-red-400 font-bold">{totalCupsNeeded} כוסות</strong>!
+        עליכם לערום מגדל יציב של <strong className="text-emerald-400 font-bold">{totalCupsNeeded} כוסות</strong>!
         <br />
-        <span className="text-orange-400 font-bold flex items-center justify-center gap-1 mt-1 text-[11px] md:text-xs">
-          <AlertTriangle className="w-4 h-4 text-orange-400 inline" />
-          שברון הטווח: רק פגיעה מדויקת מאוד ברצועת האור הירוקה הדקה תצליח להניח את הכוס!
+        <span className="text-emerald-400 font-bold flex items-center justify-center gap-1 mt-1 text-[11px] md:text-xs">
+          <AlertTriangle className="w-4 h-4 text-emerald-405 inline" />
+          לחצו בתוך רצועת האור הירוקה הרחבה כדי להניח את הכוס!
         </span>
       </p>
 
@@ -111,8 +111,8 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
               key={idx}
               className={`h-4.5 rounded flex items-center justify-center font-bold text-[10px] transition-all duration-300 ${
                 isStacked 
-                  ? 'bg-gradient-to-r from-red-600 to-red-500 text-white w-32 scale-100 opacity-100 shadow' 
-                  : 'bg-slate-800/20 text-slate-700 border border-slate-800 w-20 opacity-30'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 w-32 scale-100 opacity-100 shadow font-black' 
+                  : 'bg-slate-850 text-slate-705 border border-slate-800 w-20 opacity-30'
               }`}
             >
               [ כוס {idx + 1} של המגדל ]
@@ -123,8 +123,8 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
 
       {/* Slider Bar */}
       <div className="relative w-full h-8 bg-slate-950 rounded-full border border-slate-700 overflow-hidden mb-6 flex items-center justify-center">
-        {/* Toughened narrow Target zone (12% width spanning from 44% to 56%) */}
-        <div className="absolute w-[12%] h-full bg-emerald-500/35 border-x border-emerald-400 animate-pulse" />
+        {/* Child-friendly wide Target zone (30% width spanning from 35% to 65%) */}
+        <div className="absolute w-[30%] h-full bg-emerald-500/25 border-x border-emerald-400 animate-pulse" />
         {/* Perfect center indicator line */}
         <div className="absolute w-[3px] h-full bg-yellow-400/80" />
 

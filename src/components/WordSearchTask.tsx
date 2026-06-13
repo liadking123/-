@@ -26,6 +26,16 @@ export default function WordSearchTask({ onSuccess }: WordSearchTaskProps) {
   const [foundTeachers, setFoundTeachers] = useState<string[]>([]);
   const [currentWord, setCurrentWord] = useState("");
 
+  // Helper to normalize Hebrew letters (e.g. converting ם -> מ, ן -> נ, ך -> כ, ץ -> צ, ף -> פ) to overcome final/regular letter mismatches
+  const normalizeHebrew = (str: string) => {
+    return str
+      .replace(/ם/g, 'מ')
+      .replace(/ן/g, 'נ')
+      .replace(/ך/g, 'כ')
+      .replace(/ץ/g, 'צ')
+      .replace(/ף/g, 'פ');
+  };
+
   const handleCellClick = (r: number, c: number) => {
     // Check if cell is already selected
     const isAlreadySelected = selectedCells.some(cell => cell.r === r && cell.c === c);
@@ -45,10 +55,14 @@ export default function WordSearchTask({ onSuccess }: WordSearchTaskProps) {
     
     setCurrentWord(word);
 
-    // Check if word matches any teacher
-    const matchedTeacher = teachers.find(t => 
-      (t === word || t === wordReverse) && !foundTeachers.includes(t)
-    );
+    // Check if word matches any teacher using normalized Hebrew matching
+    const normalizedWord = normalizeHebrew(word);
+    const normalizedWordReverse = normalizeHebrew(wordReverse);
+
+    const matchedTeacher = teachers.find(t => {
+      const normalizedT = normalizeHebrew(t);
+      return (normalizedT === normalizedWord || normalizedT === normalizedWordReverse) && !foundTeachers.includes(t);
+    });
 
     if (matchedTeacher) {
       const updatedFound = [...foundTeachers, matchedTeacher];

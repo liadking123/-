@@ -397,6 +397,56 @@ export default function App() {
     }
   };
 
+  // Handle Automatic digital task completion and direct progression without passcode or QR!
+  const handleDigitalTaskSuccess = async () => {
+    if (!currentTeam) return;
+    
+    const currentIdx = currentTeam.currentStation;
+    const nextIdx = currentIdx + 1;
+    const finished = nextIdx >= STATIONS.length;
+
+    try {
+      // Save the thanks note if it was typed (for station 4)
+      if (currentIdx === 3 && thankYouText.trim().length > 0) {
+        await updateDoc(doc(db, 'teams', currentTeam.id), {
+          thankYouNote: thankYouText.trim()
+        });
+      }
+
+      // Update state in server
+      await updateTeamStation(currentTeam.id, nextIdx, finished);
+      
+      // Trigger live notification
+      const statName = STATIONS[currentIdx].title;
+      const notifMsg = finished 
+        ? `🏆 וואו! הזוג "${currentTeam.name}" סיים את המירוץ למיליון והגיע לקו הסיום! 🏆`
+        : `⚡ הזוג "${currentTeam.name}" פתר את ${statName} והתקדם לתחנה הבאה! ⚡`;
+      
+      await sendNotification(currentTeam.name, currentIdx, notifMsg);
+
+      setAlertModal({
+        isOpen: true,
+        title: finished ? '🏆 קו הסיום! 🏆' : '🎉 משימה פוצחה בהצלחה!',
+        message: finished 
+          ? `כל הכבוד לזוג האלופים "${currentTeam.name}"! סיימתם בהצלחה את המירוץ למיליון נווה נחום!` 
+          : `מעולה! פתרתם את משימת "${statName}" בהצלחה! התקדמתם אוטומטית לתחנה הבאה: "תחנה ${nextIdx + 1} - ${STATIONS[nextIdx]?.location || ''}". רוצו לשם עכשיו! 🚀`,
+        type: 'success'
+      });
+
+      // Reset local inputs
+      setDigitalCompleted(false);
+      setTextAnswer('');
+      setAnswerError('');
+      setSelectedTriviaOption(null);
+      setTriviaError('');
+      setThankYouText('');
+      setStationPasscode('');
+      setPasscodeError('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Handle Station Solving & Move Forward
   const handleSolveStation = async () => {
     if (!currentTeam) return;
@@ -869,7 +919,7 @@ export default function App() {
                               </div>
                             ) : (
                               <div className="space-y-4 animate-in fade-in duration-300">
-                                {currentIdx === 0 && <MemoryTask onSuccess={() => setDigitalCompleted(true)} currentTeam={currentTeam} allTeams={allTeams} />}
+                                {currentIdx === 0 && <MemoryTask onSuccess={handleDigitalTaskSuccess} currentTeam={currentTeam} allTeams={allTeams} />}
                                 {currentIdx === 1 && (
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
                                     <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
@@ -900,9 +950,7 @@ export default function App() {
                                         onClick={() => {
                                           const cleanAnswer = textAnswer.trim();
                                           if (cleanAnswer === '5' || cleanAnswer === 'חמש' || cleanAnswer === '5 שח' || cleanAnswer === '5 ש״ח') {
-                                            setDigitalCompleted(true);
-                                            setAnswerError('');
-                                            setTextAnswer('');
+                                            handleDigitalTaskSuccess();
                                           } else {
                                             setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️ • שימו לב ששתי המשוואות צריכות להתקיים במקביל!');
                                           }
@@ -917,7 +965,7 @@ export default function App() {
                                     )}
                                   </div>
                                 )}
-                                {currentIdx === 2 && <CoordinationTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 2 && <CoordinationTask onSuccess={handleDigitalTaskSuccess} />}
                                 {currentIdx === 3 && (
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
                                     <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
@@ -949,8 +997,7 @@ export default function App() {
                                         } else if (foundKeywords.length < 2) {
                                           setAnswerError('הברכה צריכה לכלול לפחות 2 מילות מפתח מעצימות מתוך הרשימה: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים.');
                                         } else {
-                                          setDigitalCompleted(true);
-                                          setAnswerError('');
+                                          handleDigitalTaskSuccess();
                                         }
                                       }}
                                       className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 text-white font-bold py-3.5 rounded-xl transition text-xs shadow-lg"
@@ -962,7 +1009,7 @@ export default function App() {
                                     )}
                                   </div>
                                 )}
-                                {currentIdx === 4 && <WordSearchTask onSuccess={() => setDigitalCompleted(true)} />}
+                                {currentIdx === 4 && <WordSearchTask onSuccess={handleDigitalTaskSuccess} />}
                                 {currentIdx === 5 && (
                                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
                                     <div className="flex justify-between items-center">
@@ -1091,7 +1138,7 @@ export default function App() {
                                                 setSelectedTriviaOption(opt.id);
                                                 if (opt.id === 2) {
                                                   setTriviaError('');
-                                                  setDigitalCompleted(true);
+                                                  handleDigitalTaskSuccess();
                                                 } else {
                                                   setTriviaError('תשובה שגויה! הביטו מעל קורת הבטון של שער הכניסה הראשי.');
                                                 }
@@ -1101,7 +1148,7 @@ export default function App() {
                                                   ? opt.id === 2
                                                     ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
                                                     : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
-                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                                  : 'bg-slate-900 hover:bg-slate-755 border-slate-800 text-slate-350 hover:text-white'
                                               }`}
                                             >
                                               <span>{opt.text}</span>
@@ -1127,29 +1174,21 @@ export default function App() {
 
                           <div className="space-y-4 pt-4 border-t border-slate-800/60">
                             <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                              <span className="bg-red-500/20 text-red-505 w-6 h-6 rounded-full flex items-center justify-center text-xs">ב</span>
-                              <span>אימות קבלת המכתב הפיזי בשטח ✉️</span>
+                              <span className="bg-yellow-500/20 text-yellow-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">ב</span>
+                              <span>גיבוי ומעקף תחנה (למקרה חירום או מכתב פיזי) ✉️</span>
                             </h3>
 
-                            <div className={`bg-slate-800/80 border rounded-2xl p-5 md:p-6 space-y-4 shadow-xl transition-all duration-300 ${
-                              digitalCompleted ? 'border-yellow-500/40 opacity-100' : 'border-slate-800 opacity-60 pointer-events-none'
-                            }`}>
-                              {!digitalCompleted ? (
-                                <p className="text-xs text-yellow-450 font-bold text-center bg-yellow-500/10 p-3 rounded-xl leading-relaxed">
-                                  ⚠️ שימו לב: עליכם לפתור קודם את המשימה הדיגיטלית (שלב א׳) כדי לאפשר את הזנת הקוד הפיזי של התחנה!
-                                </p>
-                              ) : (
-                                <p className="text-xs text-emerald-400 font-bold text-center bg-emerald-500/10 p-3 rounded-xl leading-relaxed">
-                                  🎉 מעולה! הפתרון הדיגיטלי הושלם. כעת מצאו את המכתב הפיזי של התחנה בשטח, והזינו את הקוד שלו כדי להתקדם!
-                                </p>
-                              )}
+                            <div className="bg-slate-800/80 border border-slate-700/40 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl transition-all duration-300">
+                              <p className="text-[11px] text-yellow-400 font-bold text-center bg-yellow-500/10 p-2.5 rounded-xl leading-relaxed">
+                                💡 טיפ: פתרון המשימה במסך (חלק א׳) יעביר אתכם אוטומטית! אם יש לכם קושי, תוכלו להקליד כאן את קוד התחנה הפיזי כדי לדלג:
+                              </p>
 
                               <div className="bg-slate-900/50 p-4 border border-slate-700/60 rounded-2xl space-y-4">
                                 <div>
                                   <label className="block text-xs font-bold text-slate-200 mb-1">
                                     🔑 אימות התקדמות המירוץ:
                                   </label>
-                                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
                                     מצאתם את המכתב או השלט הפיזי בתחנה? סרקו את ה-QR שלו או הקלידו את קוד האימות בן 4 הספרות המופיע עליו!
                                   </p>
                                 </div>
@@ -1164,12 +1203,11 @@ export default function App() {
                                 ) : (
                                   <button
                                     type="button"
-                                    disabled={!digitalCompleted}
                                     onClick={() => {
                                       setPasscodeError('');
                                       setIsScanningQr(true);
                                     }}
-                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm disabled:opacity-45"
+                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm"
                                   >
                                     <QrCode className="w-5 h-5 text-white shrink-0 animate-pulse" />
                                     <span>סרקו את קוד ה-QR במכתב הפיזי 📷</span>
@@ -1187,14 +1225,13 @@ export default function App() {
                                   pattern="[0-9]*"
                                   inputMode="numeric"
                                   maxLength={4}
-                                  disabled={!digitalCompleted}
                                   value={stationPasscode}
                                   onChange={(e) => {
                                     setStationPasscode(e.target.value);
                                     setPasscodeError('');
                                   }}
                                   placeholder="הקלידו כאן קוד בן 4 ספרות..."
-                                  className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-650 text-sm focus:outline-none focus:border-red-500 disabled:opacity-50"
+                                  className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-650 text-sm focus:outline-none focus:border-red-500"
                                 />
                                 {passcodeError && (
                                   <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse leading-relaxed">
@@ -1206,9 +1243,8 @@ export default function App() {
                               <div className="pt-2">
                                 <button
                                   type="button"
-                                  disabled={!digitalCompleted}
                                   onClick={handleSolveStation}
-                                  className="w-full bg-gradient-to-r from-red-650 to-yellow-500 hover:from-red-600 hover:to-yellow-450 text-white font-black py-4 rounded-2xl transition duration-200 transform active:scale-95 shadow-xl shadow-red-600/20 text-sm md:text-base flex items-center justify-center gap-2 disabled:opacity-40"
+                                  className="w-full bg-gradient-to-r from-red-650 to-yellow-500 hover:from-red-600 hover:to-yellow-450 text-white font-black py-4 rounded-2xl transition duration-200 transform active:scale-95 shadow-xl shadow-red-600/20 text-sm md:text-base flex items-center justify-center gap-2"
                                 >
                                   <span>אמת קוד והמשך במירוץ ➔</span>
                                   <ArrowRight className="w-5 h-5 shrink-0" />
@@ -1352,7 +1388,7 @@ export default function App() {
                 <UserCheck className="w-6 h-6" />
               </div>
               <h3 className="text-2xl font-bold text-white font-display">הרשאת כניסה למדריכים</h3>
-              <p className="text-sm text-slate-400">הקלידו את קוד הגישה של המדריך הראשי (1234):</p>
+              <p className="text-sm text-slate-400">הקלידו את קוד הגישה של המדריך הראשי:</p>
             </div>
 
             <form onSubmit={handleAuthorizeGuide} className="space-y-4">
