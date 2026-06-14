@@ -54,7 +54,8 @@ export async function getGameSettings(): Promise<GameState> {
       // Initialize with default
       const defaultState: GameState = {
         status: 'waiting',
-        countdown: 3
+        countdown: 3,
+        launchedClasses: []
       };
       await setDoc(doc(db, 'game', 'main'), defaultState);
       return defaultState;
@@ -73,6 +74,45 @@ export async function updateGameStatus(status: 'waiting' | 'countdown' | 'active
       data.startedAt = new Date().toISOString();
     }
     await updateDoc(doc(db, 'game', 'main'), data);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function launchClass(classNumber: string, currentLaunched: string[]) {
+  const path = 'game/main';
+  try {
+    const updated = currentLaunched.includes(classNumber) 
+      ? currentLaunched 
+      : [...currentLaunched, classNumber];
+    await updateDoc(doc(db, 'game', 'main'), {
+      launchedClasses: updated,
+      status: 'active'
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function unlaunchClass(classNumber: string, currentLaunched: string[]) {
+  const path = 'game/main';
+  try {
+    const updated = currentLaunched.filter(c => c !== classNumber);
+    await updateDoc(doc(db, 'game', 'main'), {
+      launchedClasses: updated
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function launchAllClasses(allClassNumbers: string[]) {
+  const path = 'game/main';
+  try {
+    await updateDoc(doc(db, 'game', 'main'), {
+      launchedClasses: allClassNumbers,
+      status: 'active'
+    });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
@@ -168,7 +208,8 @@ export async function resetGameData(): Promise<void> {
     // 1. Reset game state
     await setDoc(doc(db, 'game', 'main'), {
       status: 'waiting',
-      countdown: 3
+      countdown: 3,
+      launchedClasses: []
     });
 
     // 2. Clear teams

@@ -20,7 +20,9 @@ import {
   QrCode,
   CheckCircle2,
   Trash2,
-  ChevronsLeft
+  ChevronsLeft,
+  PlayCircle,
+  XCircle
 } from 'lucide-react';
 import { db } from './firebase';
 import QrScanner from './components/QrScanner';
@@ -46,7 +48,10 @@ import {
   sendNotification, 
   testConnection,
   resetGameData,
-  deleteTeam
+  deleteTeam,
+  launchClass,
+  unlaunchClass,
+  launchAllClasses
 } from './firebaseUtils';
 
 import MemoryTask from './components/MemoryTask';
@@ -78,6 +83,7 @@ export default function App() {
   // Game countdown local display trigger
   const [localCountdown, setLocalCountdown] = useState<number | null>(null);
   const [localCountdownText, setLocalCountdownText] = useState('');
+  const [hasStartedRace, setHasStartedRace] = useState(false);
 
   // Task states
   const [textAnswer, setTextAnswer] = useState('');
@@ -87,6 +93,7 @@ export default function App() {
   const [triviaError, setTriviaError] = useState('');
   const [digitalCompleted, setDigitalCompleted] = useState(false);
   const [triviaPhase, setTriviaPhase] = useState(1);
+  const [isStationUnlocked, setIsStationUnlocked] = useState(false);
 
   // Reset digital completed state when the team advances to the next station
   useEffect(() => {
@@ -97,6 +104,13 @@ export default function App() {
     setTextAnswer('');
     setStationPasscode('');
     setPasscodeError('');
+    
+    if (currentTeam) {
+      const uKey = `nave_nachum_unlocked_${currentTeam.currentStation}`;
+      setIsStationUnlocked(localStorage.getItem(uKey) === 'true');
+    } else {
+      setIsStationUnlocked(false);
+    }
   }, [currentTeam?.currentStation]);
 
   // Passcode verification states
@@ -219,9 +233,74 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Real-time Countdown automation triggered by game setting transition
+  // Helper to check if student's class is launched
+  const isClassLaunched = (classNum?: string) => {
+    if (!globalState.launchedClasses || globalState.launchedClasses.length === 0) {
+      return true;
+    }
+    if (!classNum) return true;
+    return globalState.launchedClasses.includes(classNum);
+  };
+
+  const isStudentLaunched = (globalState.status === 'active' || globalState.status === 'countdown') && 
+                            isClassLaunched(currentTeam?.classNumber);
+
+  // Trigger local countdown when student is officially launched
+  useEffect(() => {
+    if (role === 'student' && currentTeam) {
+      if (globalState.status === 'waiting') {
+        setHasStartedRace(false);
+        setLocalCountdown(null);
+        return;
+      }
+
+      if (isStudentLaunched) {
+        const seenKey = `nave_nachum_countdown_seen_${currentTeam.id}`;
+        const alreadySeen = localStorage.getItem(seenKey) === 'true';
+        
+        // If they haven't seen the countdown yet, and they are at the beginning (station 0)
+        if (!alreadySeen && currentTeam.currentStation === 0) {
+          localStorage.setItem(seenKey, 'true');
+          
+          let counter = 3;
+          setLocalCountdown(counter);
+          setLocalCountdownText('3');
+
+          const interval = setInterval(() => {
+            counter -= 1;
+            if (counter === 2) {
+              setLocalCountdown(2);
+              setLocalCountdownText('2');
+            } else if (counter === 1) {
+              setLocalCountdown(1);
+              setLocalCountdownText('1');
+            } else if (counter === 0) {
+              setLocalCountdown(0);
+              setLocalCountdownText('צאו לדרך! 🏁');
+            } else {
+              clearInterval(interval);
+              setLocalCountdown(null);
+              setHasStartedRace(true);
+            }
+          }, 1200);
+
+          return () => clearInterval(interval);
+        } else {
+          setHasStartedRace(true);
+          setLocalCountdown(null);
+        }
+      } else {
+        setHasStartedRace(false);
+        setLocalCountdown(null);
+      }
+    }
+  }, [role, currentTeam?.id, isStudentLaunched, currentTeam?.currentStation, globalState.status]);
+
+  // Real-time Countdown automation for Guide / general status countdown
   useEffect(() => {
     if (globalState.status === 'countdown') {
+      if (role === 'student') return; // Handled by student's local countdown effect
+      
       let counter = 3;
       setLocalCountdown(counter);
       setLocalCountdownText('3');
@@ -249,9 +328,11 @@ export default function App() {
 
       return () => clearInterval(interval);
     } else {
-      setLocalCountdown(null);
+      if (role !== 'student') {
+        setLocalCountdown(null);
+      }
     }
-  }, [globalState.status]);
+  }, [globalState.status, role, isAuthorizedGuide]);
 
   // Handles reconnecting to an existing team
   const handleReconnectToTeam = (e: React.FormEvent) => {
@@ -444,6 +525,23 @@ export default function App() {
       setPasscodeError('');
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Handle unlocking the current digital task using the code found at the physical site
+  const handleUnlockStation = () => {
+    if (!currentTeam) return;
+    const currentIdx = currentTeam.currentStation;
+    const requiredCode = STATION_PASSCODES[currentIdx];
+
+    if (stationPasscode.trim() === requiredCode) {
+      const uKey = `nave_nachum_unlocked_${currentIdx}`;
+      localStorage.setItem(uKey, 'true');
+      setIsStationUnlocked(true);
+      setPasscodeError('');
+      setStationPasscode('');
+    } else {
+      setPasscodeError('קוד פתיחה לא נכון! ודאו שהגעתם למקום וקבלו מהמנחה את קוד ההפעלה.');
     }
   };
 
@@ -768,22 +866,45 @@ export default function App() {
         )}
 
         {/* 3. STUDENT WAITING ROOM */}
-        {role === 'student' && currentTeam && globalState.status === 'waiting' && (
+        {role === 'student' && currentTeam && (!isStudentLaunched || !hasStartedRace) && (
           <div className="max-w-3xl mx-auto space-y-6 mt-6">
             <div className="bg-slate-900/70 border border-yellow-500/40 rounded-3xl p-6 text-center space-y-4">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-full text-yellow-400 text-xs font-bold">
-                <Clock className="w-3.5 h-3.5" />
-                <span>ממתינים להזנקה של המדריכים</span>
-              </div>
-              
-              <h3 className="text-2xl md:text-3xl font-bold text-white font-display">
-                שלום לצוות המנצח: <span className="text-yellow-400 font-black">{currentTeam.name}</span>
-                {currentTeam.classNumber && <span className="text-lg text-slate-400 block mt-1">מכיתה: {currentTeam.classNumber}</span>}
-              </h3>
-              
-              <p className="text-slate-300 max-w-md mx-auto text-sm leading-relaxed">
-                אתם רשומים ומחוברים בהצלחה! השענו לאחור, אל תרוצו בינתיים, ובקרוב המדריך יזניק את המשחק עבור כל הכיתות ביחד.
-              </p>
+              {globalState.status === 'active' && !isClassLaunched(currentTeam.classNumber) ? (
+                <>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-500/10 border border-red-500/30 rounded-full text-red-400 text-xs font-bold animate-pulse">
+                    <Clock className="w-3.5 h-3.5 animate-spin" />
+                    <span>המרוץ החל, אך כיתתכם ממתינה</span>
+                  </div>
+                  
+                  <h3 className="text-2xl md:text-3xl font-bold text-white font-display">
+                    שלום לצוות: <span className="text-yellow-400 font-black">{currentTeam.name}</span>
+                    {currentTeam.classNumber && <span className="text-lg text-slate-400 block mt-1">מכיתה: {currentTeam.classNumber}</span>}
+                  </h3>
+                  
+                  <p className="text-slate-200 max-w-sm mx-auto text-sm leading-relaxed font-semibold">
+                    המשחק פועל! כיתה <span className="text-yellow-400 font-bold">{currentTeam.classNumber}</span> עדיין ממתינה להזנקה של המדריכים בשטח.
+                  </p>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    אל תלחצו! ברגע שהמנחה יזניק את כיתתכם, מפת התחנות תיפתח בפניכם באופן אוטומטי עם ספירה לאחור!
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-full text-yellow-400 text-xs font-bold">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>ממתינים להזנקה של המדריכים</span>
+                  </div>
+                  
+                  <h3 className="text-2xl md:text-3xl font-bold text-white font-display">
+                    שלום לצוות המנצח: <span className="text-yellow-400 font-black">{currentTeam.name}</span>
+                    {currentTeam.classNumber && <span className="text-lg text-slate-400 block mt-1">מכיתה: {currentTeam.classNumber}</span>}
+                  </h3>
+                  
+                  <p className="text-slate-300 max-w-md mx-auto text-sm leading-relaxed">
+                    נרשמתם בהצלחה וקבוצתכם מחוברת ללובי המשחק. השענו לאחור, שמרו על כוחותיכם ובקרוב נוזנק כולנו!
+                  </p>
+                </>
+              )}
 
               {/* Connected Teams Count Badge */}
               <div className="bg-slate-800/60 p-4 rounded-2xl max-w-xs mx-auto border border-slate-700/50">
@@ -793,48 +914,16 @@ export default function App() {
                 <span className="text-xs text-slate-400">זוגות מחוברים בלובי</span>
               </div>
             </div>
-
-            {/* List of joined users */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
-              <h4 className="text-sm font-bold text-slate-300 mb-3.5 flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-slate-400" />
-                <span>החברים שמחוברים איתנו כרגע:</span>
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {allTeams.map((team) => {
-                  const isMe = team.id === currentTeam.id;
-                  return (
-                    <div
-                      key={team.id}
-                      className={`px-3 py-2.5 rounded-xl border text-sm text-center flex flex-col justify-center min-w-0 ${
-                        isMe 
-                          ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300 font-bold' 
-                          : 'bg-slate-800/40 border-slate-800 text-slate-300'
-                      }`}
-                    >
-                      <span className="truncate block font-semibold">{team.name}</span>
-                      {team.classNumber && (
-                        <span className="text-[10px] text-slate-400 font-bold mt-0.5 block">
-                          כיתה {team.classNumber}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* 4. ACTIVE GAME SCREEN FOR STUDENT */}
-        {role === 'student' && currentTeam && (globalState.status === 'active' || globalState.status === 'ended') && (
-          <div className="grid lg:grid-cols-12 gap-6 mt-4">
+        {/* 4. STUDENT ACTIVE SCENE */}
+        {role === 'student' && currentTeam && isStudentLaunched && hasStartedRace && globalState.status === 'active' && (
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
             
-            {/* LEFT / CENTER: Active Station Content (8cols) */}
+            {/* LEFT: Station details and Active Tasks (8cols) */}
             <div className="lg:col-span-8 space-y-6">
-              
               {currentTeam.isCompleted ? (
-                /* Completed Screen */
                 <div className="bg-gradient-to-br from-emerald-950/80 to-slate-900 border border-emerald-500/40 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
                   <div className="w-24 h-24 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
                     <Trophy className="w-12 h-12" />
@@ -866,14 +955,14 @@ export default function App() {
                   if (!station) return <div className="text-white">טוען תחנה...</div>;
 
                   return (
-                    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden shadow-xl animate-in fade-in duration-300">
                       {/* Station Title header */}
-                      <div className="bg-gradient-to-r from-red-600 to-red-700 py-4 px-6 flex justify-between items-center text-white">
+                      <div className="bg-gradient-to-r from-red-650 to-red-500 py-4 px-6 flex justify-between items-center text-white border-b border-slate-800">
                         <div>
                           <span className="text-xs font-mono uppercase tracking-wider bg-black/20 px-2.5 py-1 rounded-full text-red-100 font-bold block mb-1 w-max">
                             תחנה {currentIdx + 1} מתוך 6
                           </span>
-                          <h2 className="text-xl md:text-2xl font-black font-display">{station.title}</h2>
+                          <h2 className="text-xl md:text-2xl font-black font-display text-white">{station.title}</h2>
                         </div>
                         <div className="flex items-center gap-1 text-yellow-300 font-medium text-xs bg-black/25 px-3 py-1.5 rounded-xl border border-white/10 shrink-0">
                           <MapPin className="w-4 h-4 shrink-0" />
@@ -881,383 +970,339 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Station Instructions */}
-                      <div className="p-6 space-y-6">
-                        <div className="space-y-3">
-                          <h3 className="text-lg font-bold text-white flex items-center gap-1.5">
-                            <Info className="w-5 h-5 text-slate-400" />
-                            <span>הנחיות התחנה:</span>
-                          </h3>
-                          <p className="text-slate-200 text-sm md:text-base leading-relaxed bg-slate-800/40 p-4 rounded-2xl border border-slate-800">
-                            {station.description}
-                          </p>
-                          {station.ruleWarning && (
-                            <div className="bg-red-500/10 border border-red-500/40 p-3.5 rounded-xl text-red-400 text-xs font-bold flex items-center gap-2">
-                              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                              <span>{station.ruleWarning}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Interactive Task & Physical Verification */}
-                        <div className="border-t border-slate-800/60 pt-6 space-y-6">
-
+                      {/* Station Instructions & Tasks OR Locked Destination info */}
+                      {!isStationUnlocked ? (
+                        <div className="p-6 md:p-10 space-y-8 text-center max-w-2xl mx-auto py-12 animate-in fade-in zoom-in duration-300">
                           <div className="space-y-4">
-                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                              <span className="bg-red-500/20 text-red-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">א</span>
-                              <span>משימה דיגיטלית במסך:</span>
+                            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-rose-500/10 border border-rose-500/35 rounded-full text-rose-400 text-xs md:text-sm font-black uppercase tracking-wider animate-pulse font-sans">
+                              <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                              <span>החיווי במפה • המירוץ למיליון נווה נחום 🏃‍♂️</span>
+                            </div>
+                            <h2 className="text-xs md:text-sm font-bold text-slate-400 block mt-3">עליכם להגיע מיד אל:</h2>
+                            <div className="text-4xl md:text-6xl font-black text-rose-500 font-display tracking-tight leading-none bg-slate-950 p-6 md:p-8 rounded-3xl border-2 border-red-500/30 shadow-2xl shadow-rose-950/20 inline-block my-2 animate-bounce">
+                              {station.location}
+                            </div>
+                            <p className="text-slate-300 text-xs md:text-sm leading-relaxed font-semibold max-w-sm mx-auto">
+                              רוצו הכי מהר שאפשר אל <span className="text-yellow-400 font-extrabold">{station.location}</span>! כשתגיעו למקום, בקשו מהמנחה בשטח או חפשו את קוד פתיחת התחנה בן 4 הספרות, והזינו אותו למטה כדי לפתוח את המשימה הדיגיטלית.
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-6 max-w-xs mx-auto space-y-4 shadow-xl">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-300 mb-2 text-right">
+                                🔑 הזינו קוד הפעלה (4 ספרות):
+                              </label>
+                              <input
+                                type="text"
+                                pattern="[0-9]*"
+                                inputMode="numeric"
+                                maxLength={4}
+                                value={stationPasscode}
+                                onChange={(e) => {
+                                  setStationPasscode(e.target.value);
+                                  setPasscodeError('');
+                                }}
+                                placeholder="----"
+                                className="w-full text-center bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-black tracking-[0.55em] placeholder-slate-650 text-lg focus:outline-none focus:border-red-500 shadow-inner text-right"
+                              />
+                            </div>
+                            
+                            {passcodeError && (
+                              <p className="text-red-400 text-xs font-bold leading-relaxed text-center animate-pulse">
+                                {passcodeError}
+                              </p>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={handleUnlockStation}
+                              className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/20 text-white font-black py-3 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-xs flex items-center justify-center gap-2"
+                            >
+                              <span>פתחו משימה דיגיטלית 🔓</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-6 space-y-6 animate-in fade-in duration-300">
+                          <div className="space-y-3">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-1.5">
+                              <Info className="w-5 h-5 text-slate-400" />
+                              <span>הנחיות התחנה:</span>
                             </h3>
-
-                            {/* Render the current digital task based on station index */}
-                            {digitalCompleted ? (
-                              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-5 text-center space-y-2">
-                                <CheckCircle2 className="w-10 h-10 text-emerald-405 mx-auto animate-pulse" />
-                                <h4 className="text-base font-black text-white">המשימה הדיגיטלית פוצחה בהצלחה! 🏆</h4>
-                                <p className="text-xs text-emerald-350 leading-relaxed max-w-sm mx-auto font-medium">
-                                  מעולה! פתרתם את חלק א׳. עכשיו עברו לשלב הבא: מצאו או קבלו מהמנחה בשטח את המכתב הפיזי של התחנה, המכיל את קוד האימות הבא!
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-4 animate-in fade-in duration-300">
-                                {currentIdx === 0 && <MemoryTask onSuccess={handleDigitalTaskSuccess} currentTeam={currentTeam} allTeams={allTeams} />}
-                                {currentIdx === 1 && (
-                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
-                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
-                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                      <span>חידת הקפיטריה הדיגיטלית • רמת קושי גבוהה</span>
-                                    </div>
-                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
-                                      המחשב של קופת הקפיטריה השתגע ומציג חידה הדורשת מערכת משוואות! הזינו את התשובה כדי להמשיך:
-                                    </p>
-                                    <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-800 font-medium mb-3">
-                                      <p className="text-orange-450 font-sans text-right text-xs md:text-sm leading-relaxed font-bold">
-                                         ”קנינו 3 חבילות מסטיק ו-4 ארטיקים בצהריים בעלות כוללת של 38 ש״ח. מאוחר יותר באותו היום, קנינו עוד 2 חבילות מסטיק ו-5 ארטיקים בעלות כוללת של 37 ש״ח. מהו המחיר של ארטיק בודד בשקלים?“
-                                      </p>
-                                    </div>
-                                    <div className="space-y-3">
-                                      <input
-                                        type="text"
-                                        placeholder="הקלידו תשובה מספרית (למשל: 5) ובדקו..."
-                                        value={textAnswer}
-                                        onChange={(e) => {
-                                          setTextAnswer(e.target.value);
-                                          setAnswerError('');
-                                        }}
-                                        className="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono text-base focus:outline-none focus:border-red-500"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const cleanAnswer = textAnswer.trim();
-                                          if (cleanAnswer === '5' || cleanAnswer === 'חמש' || cleanAnswer === '5 שח' || cleanAnswer === '5 ש״ח') {
-                                            handleDigitalTaskSuccess();
-                                          } else {
-                                            setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️ • שימו לב ששתי המשוואות צריכות להתקיים במקביל!');
-                                          }
-                                        }}
-                                        className="w-full bg-red-650 hover:bg-red-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-xs"
-                                      >
-                                        בדקו תשובה 🔍
-                                      </button>
-                                    </div>
-                                    {answerError && (
-                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
-                                    )}
-                                  </div>
-                                )}
-                                {currentIdx === 2 && <CoordinationTask onSuccess={handleDigitalTaskSuccess} />}
-                                {currentIdx === 3 && (
-                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
-                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
-                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                      <span>כתבו מכתב תודה דיגיטלי מורחב ומשמעותי</span>
-                                    </div>
-                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-medium">
-                                      בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, כתבו ברכת הוקרה חמה ומשמעותית (<strong>לפחות 40 תווים ויש לכלול 2 מילים מתוך: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים</strong>):
-                                    </p>
-                                    <textarea
-                                      value={thankYouText}
-                                      onChange={(e) => {
-                                        setThankYouText(e.target.value);
-                                        setAnswerError('');
-                                      }}
-                                      rows={3}
-                                      placeholder="הקלידו מילת הערכה או תודה עשירה ומכובדת לצוות המזכירות והניהול הראוי להערכה..."
-                                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 text-xs md:text-sm font-medium leading-relaxed resize-none focus:outline-none focus:border-red-500"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const text = thankYouText.trim();
-                                        const keywords = ['תודה', 'מעריכים', 'עבודה', 'מסורים', 'לנו', 'עוזרים'];
-                                        const foundKeywords = keywords.filter(word => text.includes(word));
-                                        
-                                        if (text.length < 40) {
-                                          setAnswerError('הברכה קצרה מדי! עליכם לכתוב לפחות 40 תווים כדי לבטא הערכה אמיתית ומכובדת ✍️');
-                                        } else if (foundKeywords.length < 2) {
-                                          setAnswerError('הברכה צריכה לכלול לפחות 2 מילות מפתח מעצימות מתוך הרשימה: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים.');
-                                        } else {
-                                          handleDigitalTaskSuccess();
-                                        }
-                                      }}
-                                      className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 text-white font-bold py-3.5 rounded-xl transition text-xs shadow-lg"
-                                    >
-                                      שגרו ברכת הוקרה וסיימו משימה זו ! ❤️
-                                    </button>
-                                    {answerError && (
-                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
-                                    )}
-                                  </div>
-                                )}
-                                {currentIdx === 4 && <WordSearchTask onSuccess={handleDigitalTaskSuccess} />}
-                                {currentIdx === 5 && (
-                                  <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
-                                    <div className="flex justify-between items-center">
-                                      <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
-                                        <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
-                                        <span>חידת המנהלת הדיגיטלית המורחבת</span>
-                                      </div>
-                                      <span className="text-xs bg-slate-900 border border-slate-800 px-2 py-1 rounded text-orange-400 font-bold">
-                                        שלב {triviaPhase} מתוך 3
-                                      </span>
-                                    </div>
-                                    <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
-                                      המנהלת רוצה לוודא שאתם מכירים לעומק את מורשת בית הספר נווה נחום. ענו נכון על 3 שאלות רצופות כדי להמשיך:
-                                    </p>
-                                    
-                                    {triviaPhase === 1 && (
-                                      <>
-                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed">
-                                          שאלה 1: מתי רשמית נוסד בית הספר התיכון נווה נחום?
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-2.5">
-                                          {[
-                                            { id: 1, text: "בשנת 1982 על ידי חבר נאמנים של מערכת החינוך" },
-                                            { id: 2, text: "בשנת 1994 (שנת ההקמה הרשמית וההכרזה המוסדית)" },
-                                            { id: 3, text: "בשנת 2001 עם מעבר המבנה הראשון למתחם הישן" },
-                                            { id: 4, text: "בשנת 2008 במסגרת הרפורמה הגדולה של משרד החינוך" }
-                                          ].map((opt) => (
-                                            <button
-                                              key={opt.id}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedTriviaOption(opt.id);
-                                                if (opt.id === 2) {
-                                                  setTriviaError('');
-                                                  setTimeout(() => {
-                                                    setTriviaPhase(2);
-                                                    setSelectedTriviaOption(null);
-                                                  }, 800);
-                                                } else {
-                                                  setTriviaError('תשובה שגויה! נסו לשאול תלמידים ותיקים או את סגל המנהלה.');
-                                                }
-                                              }}
-                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
-                                                selectedTriviaOption === opt.id
-                                                  ? opt.id === 2
-                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
-                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
-                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
-                                              }`}
-                                            >
-                                              <span>{opt.text}</span>
-                                              {selectedTriviaOption === opt.id && (
-                                                <span className="text-xs font-bold font-mono">
-                                                  {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
-                                                </span>
-                                              )}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {triviaPhase === 2 && (
-                                      <>
-                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
-                                          שאלה 2: איזה מקצוע לימוד הוא מקצוע חובה בכל המגמות המדעיות השנה בתיכון?
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-2.5">
-                                          {[
-                                            { id: 1, text: "פיזיקה גרעינית ומאיצי חלקיקים" },
-                                            { id: 2, text: "מדעי המחשב ומבוא לתכנות" },
-                                            { id: 3, text: "אזרחות דיגיטלית ואתיקת רשת" },
-                                            { id: 4, text: "ביולוגיה חישובית והנדסה גנטית" }
-                                          ].map((opt) => (
-                                            <button
-                                              key={opt.id}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedTriviaOption(opt.id);
-                                                if (opt.id === 3) {
-                                                  setTriviaError('');
-                                                  setTimeout(() => {
-                                                    setTriviaPhase(3);
-                                                    setSelectedTriviaOption(null);
-                                                  }, 800);
-                                                } else {
-                                                  setTriviaError('תשובה שגויה! רמז: זה קשור לנורמות התנהגות ואחריות במרחב הווירטואלי.');
-                                                }
-                                              }}
-                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
-                                                selectedTriviaOption === opt.id
-                                                  ? opt.id === 3
-                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
-                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
-                                                  : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
-                                              }`}
-                                            >
-                                              <span>{opt.text}</span>
-                                              {selectedTriviaOption === opt.id && (
-                                                <span className="text-xs font-bold font-mono">
-                                                  {opt.id === 3 ? '✓ נכון!' : '✗ שגוי'}
-                                                </span>
-                                              )}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {triviaPhase === 3 && (
-                                      <>
-                                        <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-855 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
-                                          שאלה 3: מהו מוטו בית הספר התיכון הרשמי החקוק מעל שער הכניסה הראשי?
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-2.5">
-                                          {[
-                                            { id: 1, text: "מדע, ערכים והתמדה לעתיד מזהיר" },
-                                            { id: 2, text: "דרך ארץ קדימה לידע ולמצוינות" },
-                                            { id: 3, text: "חינוך, חדשנות ומנהיגות קהילתית" },
-                                            { id: 4, text: "חוקרים היום, מובילים מחר בטכנולוגיה" }
-                                          ].map((opt) => (
-                                            <button
-                                              key={opt.id}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedTriviaOption(opt.id);
-                                                if (opt.id === 2) {
-                                                  setTriviaError('');
-                                                  handleDigitalTaskSuccess();
-                                                } else {
-                                                  setTriviaError('תשובה שגויה! הביטו מעל קורת הבטון של שער הכניסה הראשי.');
-                                                }
-                                              }}
-                                              className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
-                                                selectedTriviaOption === opt.id
-                                                  ? opt.id === 2
-                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
-                                                    : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
-                                                  : 'bg-slate-900 hover:bg-slate-755 border-slate-800 text-slate-350 hover:text-white'
-                                              }`}
-                                            >
-                                              <span>{opt.text}</span>
-                                              {selectedTriviaOption === opt.id && (
-                                                <span className="text-xs font-bold font-mono">
-                                                  {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
-                                                </span>
-                                              )}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {triviaError && (
-                                      <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{triviaError}</p>
-                                    )}
-                                  </div>
-                                )}
+                            <p className="text-slate-200 text-sm md:text-base leading-relaxed bg-slate-800/40 p-4 rounded-2xl border border-slate-800">
+                              {station.description}
+                            </p>
+                            {station.ruleWarning && (
+                              <div className="bg-red-500/10 border border-red-500/40 p-3.5 rounded-xl text-red-400 text-xs font-bold flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                                <span>{station.ruleWarning}</span>
                               </div>
                             )}
                           </div>
 
-                          <div className="space-y-4 pt-4 border-t border-slate-800/60">
-                            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                              <span className="bg-yellow-500/20 text-yellow-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">ב</span>
-                              <span>גיבוי ומעקף תחנה (למקרה חירום או מכתב פיזי) ✉️</span>
+                          {/* Interactive Section - Digital Task Only */}
+                          <div className="border-t border-slate-800/60 pt-6 space-y-4">
+                            <h3 className="text-sm font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                              <Sparkles className="w-4 h-4 text-orange-400 animate-pulse" />
+                              <span>בצעו את המשימה הזוגית:</span>
                             </h3>
 
-                            <div className="bg-slate-800/80 border border-slate-700/40 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl transition-all duration-300">
-                              <p className="text-[11px] text-yellow-400 font-bold text-center bg-yellow-500/10 p-2.5 rounded-xl leading-relaxed">
-                                💡 טיפ: פתרון המשימה במסך (חלק א׳) יעביר אתכם אוטומטית! אם יש לכם קושי, תוכלו להקליד כאן את קוד התחנה הפיזי כדי לדלג:
-                              </p>
-
-                              <div className="bg-slate-900/50 p-4 border border-slate-700/60 rounded-2xl space-y-4">
-                                <div>
-                                  <label className="block text-xs font-bold text-slate-200 mb-1">
-                                    🔑 אימות התקדמות המירוץ:
-                                  </label>
-                                  <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
-                                    מצאתם את המכתב או השלט הפיזי בתחנה? סרקו את ה-QR שלו או הקלידו את קוד האימות בן 4 הספרות המופיע עליו!
+                            {/* Render the current digital task based on station index */}
+                            <div className="space-y-4">
+                              {currentIdx === 0 && <MemoryTask onSuccess={handleDigitalTaskSuccess} currentTeam={currentTeam} allTeams={allTeams} />}
+                              {currentIdx === 1 && (
+                                <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                  <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                    <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                    <span>חידת הקפיטריה הדיגיטלית • רמת קושי גבוהה</span>
+                                  </div>
+                                  <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
+                                    המחשב של קופת הקפיטריה השתגע ומציג חידה הדורשת מערכת משוואות! הזינו את התשובה כדי להמשיך:
                                   </p>
+                                  <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-800 font-medium mb-3">
+                                    <p className="text-orange-450 font-sans text-right text-xs md:text-sm leading-relaxed font-bold">
+                                       ”קנינו 3 חבילות מסטיק ו-4 ארטיקים בצהריים בעלות כוללת של 38 ש״ח. באותו היום, קנינו עוד 2 חבילות מסטיק ו-5 ארטיקים בעלות כוללת של 37 ש״ח. מהו המחיר של ארטיק בודד בשקלים?“
+                                    </p>
+                                  </div>
+                                  <div className="space-y-3">
+                                    <input
+                                      type="text"
+                                      placeholder="הקלידו תשובה מספרית (למשל: 5) ובדקו..."
+                                      value={textAnswer}
+                                      onChange={(e) => {
+                                        setTextAnswer(e.target.value);
+                                        setAnswerError('');
+                                      }}
+                                      className="w-full text-center bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono text-base focus:outline-none focus:border-red-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const cleanAnswer = textAnswer.trim();
+                                        if (cleanAnswer === '5' || cleanAnswer === 'חמש' || cleanAnswer === '5 שח' || cleanAnswer === '5 ש״ח') {
+                                          handleDigitalTaskSuccess();
+                                        } else {
+                                          setAnswerError('תשובה שגויה! נסו לחשב שוב בדף הטיוטה ✍️ • שימו לב ששתי המשוואות צריכות להתקיים במקביל!');
+                                        }
+                                      }}
+                                      className="w-full bg-red-650 hover:bg-red-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg text-xs"
+                                    >
+                                      בדקו תשובה 🔍
+                                    </button>
+                                  </div>
+                                  {answerError && (
+                                    <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
+                                  )}
                                 </div>
-
-                                {/* QR Code Scanner Toggle block */}
-                                {isScanningQr ? (
-                                  <QrScanner
-                                    onScanSuccess={handleQrSolved}
-                                    onClose={() => setIsScanningQr(false)}
-                                    expectedCode={requiredCode}
+                              )}
+                              {currentIdx === 2 && <CoordinationTask onSuccess={handleDigitalTaskSuccess} />}
+                              {currentIdx === 3 && (
+                                <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                  <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                    <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                    <span>כתבו מכתב תודה דיגיטלי מורחב ומשמעותי</span>
+                                  </div>
+                                  <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
+                                    בנוסף לתליית הפתק הפיזי שלכם במזכירות בית הספר, כתבו ברכת הוקרה חמה ומשמעותית (<strong>לפחות 40 תווים ויש לכלול 2 מילים מתוך: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים</strong>):
+                                  </p>
+                                  <textarea
+                                    value={thankYouText}
+                                    onChange={(e) => {
+                                      setThankYouText(e.target.value);
+                                      setAnswerError('');
+                                    }}
+                                    rows={3}
+                                    placeholder="הקלידו מילת הערכה או תודה עשירה ומכובדת לצוות המזכירות והניהול הראוי להערכה..."
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-650 text-xs md:text-sm font-medium leading-relaxed resize-none focus:outline-none focus:border-red-500"
                                   />
-                                ) : (
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setPasscodeError('');
-                                      setIsScanningQr(true);
+                                      const text = thankYouText.trim();
+                                      const keywords = ['תודה', 'מעריכים', 'עבודה', 'מסורים', 'לנו', 'עוזרים'];
+                                      const foundKeywords = keywords.filter(word => text.includes(word));
+                                      
+                                      if (text.length < 40) {
+                                        setAnswerError('הברכה קצרה מדי! עליכם לכתוב לפחות 40 תווים כדי לבטא הערכה אמיתית ומכובדת ✍️');
+                                      } else if (foundKeywords.length < 2) {
+                                        setAnswerError('הברכה צריכה לכלול לפחות 2 מילות מפתח מעצימות מתוך הרשימה: תודה, מעריכים, עבודה, מסורים, לנו, עוזרים.');
+                                      } else {
+                                        handleDigitalTaskSuccess();
+                                      }
                                     }}
-                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 border border-red-500/30 text-white font-black py-4 rounded-xl transition duration-200 transform active:scale-95 shadow-lg text-sm"
+                                    className="w-full bg-gradient-to-r from-red-650 to-red-500 hover:from-red-600 hover:to-red-450 text-white font-bold py-3.5 rounded-xl transition text-xs shadow-lg"
                                   >
-                                    <QrCode className="w-5 h-5 text-white shrink-0 animate-pulse" />
-                                    <span>סרקו את קוד ה-QR במכתב הפיזי 📷</span>
+                                    שגרו ברכת הוקרה וסיימו משימה זו ! ❤️
                                   </button>
-                                )}
-
-                                <div className="relative flex py-1 items-center">
-                                  <div className="flex-grow border-t border-slate-800"></div>
-                                  <span className="flex-shrink mx-4 text-slate-500 text-[10px] uppercase font-bold">או הקלידו את הקוד מהמכתב</span>
-                                  <div className="flex-grow border-t border-slate-800"></div>
+                                  {answerError && (
+                                    <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{answerError}</p>
+                                  )}
                                 </div>
-
-                                <input
-                                  type="text"
-                                  pattern="[0-9]*"
-                                  inputMode="numeric"
-                                  maxLength={4}
-                                  value={stationPasscode}
-                                  onChange={(e) => {
-                                    setStationPasscode(e.target.value);
-                                    setPasscodeError('');
-                                  }}
-                                  placeholder="הקלידו כאן קוד בן 4 ספרות..."
-                                  className="w-full text-center bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-white font-mono font-bold tracking-widest placeholder-slate-650 text-sm focus:outline-none focus:border-red-500"
-                                />
-                                {passcodeError && (
-                                  <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse leading-relaxed">
-                                    {passcodeError}
+                              )}
+                              {currentIdx === 4 && <WordSearchTask onSuccess={handleDigitalTaskSuccess} />}
+                              {currentIdx === 5 && (
+                                <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-5 md:p-6 space-y-4 shadow-xl text-right">
+                                  <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2.5 text-yellow-400 font-bold text-base">
+                                      <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+                                      <span>חידת המנהלת הדיגיטלית המורחבת</span>
+                                    </div>
+                                    <span className="text-xs bg-slate-900 border border-slate-800 px-2 py-1 rounded text-orange-400 font-bold font-mono">
+                                      שלב {triviaPhase} מתוך 3
+                                    </span>
+                                  </div>
+                                  <p className="text-xs md:text-sm text-slate-300 leading-relaxed font-semibold">
+                                    המנהלת רוצה לוודא שאתם מכירים לעומק את מורשת בית הספר נווה נחום. ענו נכון על 3 שאלות רצופות כדי להמשיך:
                                   </p>
-                                )}
-                              </div>
+                                  
+                                  {triviaPhase === 1 && (
+                                    <>
+                                      <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed">
+                                        שאלה 1: מתי רשמית נוסד בית הספר התיכון נווה נחום?
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-2.5">
+                                        {[
+                                          { id: 1, text: "בשנת 1982 על ידי חבר נאמנים של מערכת החינוך" },
+                                          { id: 2, text: "בשנת 1994 (שנת ההקמה הרשמית וההכרזה המוסדית)" },
+                                          { id: 3, text: "בשנת 2001 עם מעבר המבנה הראשון למתחם הישן" },
+                                          { id: 4, text: "בשנת 2008 במסגרת הרפורמה הגדולה של משרד החינוך" }
+                                        ].map((opt) => (
+                                          <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedTriviaOption(opt.id);
+                                              if (opt.id === 2) {
+                                                setTriviaError('');
+                                                setTimeout(() => {
+                                                  setTriviaPhase(2);
+                                                  setSelectedTriviaOption(null);
+                                                }, 800);
+                                              } else {
+                                                setTriviaError('תשובה שגויה! נסו לשאול תלמידים ותיקים או את סגל המנהלה.');
+                                              }
+                                            }}
+                                            className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                              selectedTriviaOption === opt.id
+                                                ? opt.id === 2
+                                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                  : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                                : 'bg-slate-900 hover:bg-slate-750 border-slate-800 text-slate-350 hover:text-white'
+                                            }`}
+                                          >
+                                            <span>{opt.text}</span>
+                                            {selectedTriviaOption === opt.id && (
+                                              <span className="text-xs font-bold font-mono">
+                                                {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
+                                              </span>
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
 
-                              <div className="pt-2">
-                                <button
-                                  type="button"
-                                  onClick={handleSolveStation}
-                                  className="w-full bg-gradient-to-r from-red-650 to-yellow-500 hover:from-red-600 hover:to-yellow-450 text-white font-black py-4 rounded-2xl transition duration-200 transform active:scale-95 shadow-xl shadow-red-600/20 text-sm md:text-base flex items-center justify-center gap-2"
-                                >
-                                  <span>אמת קוד והמשך במירוץ ➔</span>
-                                  <ArrowRight className="w-5 h-5 shrink-0" />
-                                </button>
-                                <p className="text-[11px] text-slate-400 text-center mt-2">
-                                  הזנת הקוד מהמכתב מאשרת שסיימתם לחלוטין את התחנה הפיזית!
-                                </p>
-                              </div>
+                                  {triviaPhase === 2 && (
+                                    <>
+                                      <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-850 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
+                                        שאלה 2: איזה מקצוע לימוד הוא מקצוע חובה בכל המגמות המדעיות השנה בתיכון?
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-2.5">
+                                        {[
+                                          { id: 1, text: "פיזיקה גרעינית ומאיצי חלקיקים" },
+                                          { id: 2, text: "מדעי המחשב ומבוא לתכנות" },
+                                          { id: 3, text: "אזרחות דיגיטלית ואתיקת רשת" },
+                                          { id: 4, text: "ביולוגיה חישובית והנדסה גנטית" }
+                                        ].map((opt) => (
+                                          <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedTriviaOption(opt.id);
+                                              if (opt.id === 3) {
+                                                setTriviaError('');
+                                                setTimeout(() => {
+                                                  setTriviaPhase(3);
+                                                  setSelectedTriviaOption(null);
+                                                }, 800);
+                                              } else {
+                                                setTriviaError('תשובה שגויה! רמז: זה קשור לנורמות התנהגות ואחריות במרחב הווירטואלי.');
+                                              }
+                                            }}
+                                            className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                              selectedTriviaOption === opt.id
+                                                ? opt.id === 3
+                                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                  : 'bg-red-500/20 border-red-550 text-red-400 font-bold'
+                                                : 'bg-slate-900 hover:bg-slate-755 border-slate-800 text-slate-350 hover:text-white'
+                                            }`}
+                                          >
+                                            <span>{opt.text}</span>
+                                            {selectedTriviaOption === opt.id && (
+                                              <span className="text-xs font-bold font-mono">
+                                                {opt.id === 3 ? '✓ נכון!' : '✗ שגוי'}
+                                              </span>
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {triviaPhase === 3 && (
+                                    <>
+                                      <div className="bg-slate-950/45 p-4 rounded-xl border border-slate-855 font-bold text-white text-center text-xs md:text-sm mb-2 leading-relaxed animate-in slide-in-from-left duration-200">
+                                        שאלה 3: מהו מוטו בית הספר התיכון הרשמי החקוק מעל שער הכניסה הראשי?
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-2.5">
+                                        {[
+                                          { id: 1, text: "מדע, ערכים והתמדה לעתיד מזהיר" },
+                                          { id: 2, text: "דרך ארץ קדימה לידע ולמצוינות" },
+                                          { id: 3, text: "חינוך, חדשנות ומנהיגות קהילתית" },
+                                          { id: 4, text: "חוקרים היום, מובילים מחר בטכנולוגיה" }
+                                        ].map((opt) => (
+                                          <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedTriviaOption(opt.id);
+                                              if (opt.id === 2) {
+                                                setTriviaError('');
+                                                handleDigitalTaskSuccess();
+                                              } else {
+                                                setTriviaError('תשובה שגויה! הביטו מעל קורת הבטון של שער הכניסה הראשי.');
+                                              }
+                                            }}
+                                            className={`text-right px-4 py-3 rounded-xl border font-semibold text-xs md:text-sm transition flex justify-between items-center ${
+                                              selectedTriviaOption === opt.id
+                                                ? opt.id === 2
+                                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold'
+                                                  : 'bg-red-500/20 border-red-550 text-red-000 font-bold'
+                                                : 'bg-slate-900 hover:bg-slate-755 border-slate-800 text-slate-350 hover:text-white'
+                                            }`}
+                                          >
+                                            <span>{opt.text}</span>
+                                            {selectedTriviaOption === opt.id && (
+                                              <span className="text-xs font-bold font-mono">
+                                                {opt.id === 2 ? '✓ נכון!' : '✗ שגוי'}
+                                              </span>
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {triviaError && (
+                                    <p className="text-red-400 text-xs font-bold text-center mt-1 animate-pulse">{triviaError}</p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
-
+                   
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })()
@@ -1478,6 +1523,110 @@ export default function App() {
                   {globalState.status === 'waiting' ? 'הכנה' : 'רץ'}
                 </span>
               </div>
+            </div>
+
+            {/* Selective Class Launcher Panel */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <PlayCircle className="w-6 h-6 text-yellow-400" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white font-display">הזנקה סלקטיבית וכיתתית ⏱️</h3>
+                    <p className="text-xs text-slate-400 font-sans">הזניקו כיתות ספציפיות בנפרד או בו-זמנית, ללא הפרעה לשאר המרוץ</p>
+                  </div>
+                </div>
+
+                <div className="text-xs bg-slate-950 px-3 py-1.5 rounded-full border border-slate-800 text-slate-400 font-sans">
+                  סה"כ כיתות בלובי: <span className="text-yellow-400 font-bold">{uniqueClasses.length}</span>
+                </div>
+              </div>
+
+              {uniqueClasses.length === 0 ? (
+                <div className="text-slate-400 text-xs py-5 border border-dashed border-slate-800 text-center rounded-2xl bg-slate-950/20 font-sans">
+                  לא נמצאו כיתות רשומות כרגע בלובי. ברגע שזוג ראשון יירשם עם שם כיתה, הכפתורים שלו יופיעו כאן להזנקה מיידית!
+                </div>
+              ) : (
+                <div className="space-y-4 font-sans">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {uniqueClasses.map((cls) => {
+                      const isLaunched = globalState.launchedClasses?.includes(cls) || (globalState.status === 'active' && (!globalState.launchedClasses || globalState.launchedClasses.length === 0));
+                      const classTeamsCount = allTeams.filter(t => t.classNumber === cls).length;
+
+                      return (
+                        <div 
+                          key={cls}
+                          className={`flex items-center gap-3 p-3.5 rounded-2xl border ${
+                            isLaunched 
+                              ? 'bg-emerald-950/40 border-emerald-500/30' 
+                              : 'bg-slate-950/40 border-slate-800/80'
+                          } transition-all duration-200 justify-between`}
+                        >
+                          <div>
+                            <span className="text-sm font-black text-white block font-display">כיתה {cls}</span>
+                            <span className="text-xs text-slate-400 block">{classTeamsCount} זוגות רשומים</span>
+                          </div>
+                          
+                          {isLaunched ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">פעילה 🟢</span>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(`האם להחזיר את כיתה ${cls} ללובי ההמתנה?`)) {
+                                    await unlaunchClass(cls, globalState.launchedClasses || []);
+                                  }
+                                }}
+                                className="text-red-400 hover:text-red-350 p-1 rounded-lg hover:bg-red-500/10 transition"
+                                title="החזר ללובי"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                await launchClass(cls, globalState.launchedClasses || []);
+                              }}
+                              className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition duration-150 shadow-md active:scale-95 flex items-center gap-1"
+                            >
+                              <span>הזנק!</span>
+                              <Play className="w-3 h-3 fill-slate-950" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2.5 pt-2 border-t border-slate-800/60">
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('האם להזניק את כל הכיתות שרשומות כרגע בו-זמנית?')) {
+                          await launchAllClasses(uniqueClasses);
+                        }
+                      }}
+                      className="text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl transition border border-slate-700/60"
+                    >
+                      🚀 הזנק את כל {uniqueClasses.length} הכיתות ביחד
+                    </button>
+                    
+                    {globalState.launchedClasses && globalState.launchedClasses.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('האם לבטל את הזנקת כל הכיתות ולהחזיר את כל הכיתות ללובי?')) {
+                            await updateDoc(doc(db, 'game', 'main'), {
+                              launchedClasses: [],
+                              status: 'waiting'
+                            });
+                          }
+                        }}
+                        className="text-xs bg-red-950/30 hover:bg-red-900/30 text-red-400 font-bold px-4 py-2.5 rounded-xl transition border border-red-900/50"
+                      >
+                        🛑 בטל הזנקות והחזר את כולן ללובי
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid md:grid-cols-12 gap-6">

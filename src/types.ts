@@ -2,6 +2,7 @@ export interface GameState {
   status: 'waiting' | 'countdown' | 'active' | 'ended';
   countdown: number; // 3, 2, 1, 0
   startedAt?: string;
+  launchedClasses?: string[]; // E.g. ['ז\'1', 'ז\'2']
 }
 
 export interface Team {

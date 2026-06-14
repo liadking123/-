@@ -7,12 +7,12 @@ interface CoordinationTaskProps {
 
 export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
   const [cupsStacked, setCupsStacked] = useState(0);
-  const totalCupsNeeded = 5; // Reduced from 8 to 5 for better accessibility
+  const totalCupsNeeded = 5; // Balanced challenging length
   const [sliderPos, setSliderPos] = useState(50); // 0 to 100
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'failed' | 'success'>('idle');
   
   // Use refs for moving values to achieve ultra-smooth 60fps movement with no React rendering tearing
-  const speed = useRef(1.3); // Slower initial speed (1.3 instead of 2.4)
+  const speed = useRef(1.4); // Balanced, engaging initial speed
   const direction = useRef<'left' | 'right'>('right');
   const animationFrameId = useRef<number | null>(null);
 
@@ -53,20 +53,20 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
     if (gameState !== 'playing') {
       setGameState('playing');
       setCupsStacked(0);
-      speed.current = 1.3; // Much slower and easier initial speed
+      speed.current = 1.4; // Balanced initial speed for nice challenge
       direction.current = 'right';
       return;
     }
 
-    // Wide, child-friendly target area: from 35% to 65% (giving a 30% hit zone!)
-    const isGood = sliderPos >= 35 && sliderPos <= 65;
+    // Engaging, moderately challenging target area: 38% to 62% (giving a 24% hit zone!)
+    const isGood = sliderPos >= 38 && sliderPos <= 62;
 
     if (isGood) {
       const nextCups = cupsStacked + 1;
       setCupsStacked(nextCups);
       
-      // Gentle speed increase per cup stacked
-      speed.current += 0.15;
+      // Noticeable speed increase per cup stacked to test coordination
+      speed.current += 0.22;
 
       if (nextCups >= totalCupsNeeded) {
         setGameState('success');
@@ -98,7 +98,7 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
         <br />
         <span className="text-emerald-400 font-bold flex items-center justify-center gap-1 mt-1 text-[11px] md:text-xs">
           <AlertTriangle className="w-4 h-4 text-emerald-405 inline" />
-          לחצו בתוך רצועת האור הירוקה הרחבה כדי להניח את הכוס!
+          לחצו בדיוק בתוך רצועת האור הירוקה כדי להניח את הכוס!
         </span>
       </p>
 
@@ -123,8 +123,8 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
 
       {/* Slider Bar */}
       <div className="relative w-full h-8 bg-slate-950 rounded-full border border-slate-700 overflow-hidden mb-6 flex items-center justify-center">
-        {/* Child-friendly wide Target zone (30% width spanning from 35% to 65%) */}
-        <div className="absolute w-[30%] h-full bg-emerald-500/25 border-x border-emerald-400 animate-pulse" />
+        {/* Challenging target zone (24% width spanning from 38% to 62%) */}
+        <div className="absolute w-[24%] h-full bg-emerald-500/25 border-x border-emerald-400 animate-pulse" />
         {/* Perfect center indicator line */}
         <div className="absolute w-[3px] h-full bg-yellow-400/80" />
 
@@ -160,11 +160,19 @@ export default function CoordinationTask({ onSuccess }: CoordinationTaskProps) {
             {gameState === 'failed' && 'המגדל קרס! לחצו לניסיון חדש 🔄'}
           </button>
           
-          <div className="text-center text-xs text-slate-350 font-semibold">
+          <div className="text-center text-xs text-slate-350 font-semibold font-sans">
             {gameState === 'playing' && `כוסות שנערמו בהצלחה: ${cupsStacked} מתוך ${totalCupsNeeded}`}
             {gameState === 'idle' && 'מומלץ לעבוד בתיאום עין-יד מדויק וריכוז שיא!'}
-            {gameState === 'failed' && 'זה חמקמק! נסו לתזמן מוקדם או מאוחר קלות!'}
+            {gameState === 'failed' && 'קרה משהו? תוכלו לדלג באישור המנחה בשטח או לנסות שנית.'}
           </div>
+
+          <button
+            type="button"
+            onClick={() => onSuccess()}
+            className="w-full mt-2 py-2 hover:bg-slate-700/50 border border-dashed border-slate-700 text-[10px] text-slate-500 rounded-lg hover:text-slate-400 transition font-bold"
+          >
+            קשיים קואורדינטיביים? דלגו לתחנה הבאה (אישור מנחה קבוצה) 🛠️
+          </button>
         </div>
       )}
     </div>

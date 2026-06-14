@@ -10,7 +10,7 @@ export default function WordSearchTask({ onSuccess }: WordSearchTaskProps) {
   
   // Custom pre-crafted 10x10 grid containing vertical, horizontal, and reverse hidden teachers!
   const grid = [
-    ['ש', 'ת', 'ח', 'י', 'י', 'מ', 'א', 'ב', 'ג', 'ד'],
+    ['ש', 'ת', 'ח', 'י', 'י', 'ם', 'א', 'ב', 'ג', 'ד'],
     ['מ', 'צ', 'ל', 'מ', 'ר', 'ח', 'ל', 'ט', 'י', 'כ'],
     ['ז', 'ה', 'ב', 'ט', 'ו', 'פ', 'י', 'ע', 'י', 'ק'],
     ['כ', 'ד', 'נ', 'י', 'א', 'ל', 'מ', 'ס', 'ו', 'ל'],
